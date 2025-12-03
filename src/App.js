@@ -67,13 +67,14 @@ function App() {
       if (globeRef.current && globeRef.current.scene) {
         const scene = globeRef.current.scene();
         if (scene && scene.background) {
-          scene.background.set('#f0f2f5');
+          scene.background.set('#f5f5f5');
         } else if (scene) {
-          scene.background = new THREE.Color('#f0f2f5');
+          scene.background = new THREE.Color('#f5f5f5');
         }
       }
     }, []);
   const [trend1Current, setTrend1Current] = useState(null);
+  const [trend4Current, setTrend4Current] = useState(null);
   const [stackedCurrents, setStackedCurrents] = useState([]);
   const [trendWindows, setTrendWindows] = useState({
     trendChart1: 'month',
@@ -88,6 +89,7 @@ function App() {
     const chartIds = ['trendChart1', 'trendChart2', 'trendChart3', 'trendChart4'];
     const chartInstances = [];
     let trend1LastValue = null;
+    let trend4LastValue = null;
     let stackedLastValues = [];
     chartIds.forEach((id, idx) => {
       const ctx = document.getElementById(id);
@@ -112,8 +114,7 @@ function App() {
               responsive: true,
               plugins: {
                 legend: {
-                  display: true,
-                  position: 'top'
+                  display: false
                 },
                 title: {
                   display: false
@@ -142,6 +143,9 @@ function App() {
           if (id === 'trendChart1') {
             trend1LastValue = trendData[trendData.length - 1]?.y ?? null;
           }
+          if (id === 'trendChart4') {
+            trend4LastValue = trendData[trendData.length - 1]?.y ?? null;
+          }
           chartInstance = new Chart(ctx, {
             type: id === 'trendChart4' ? 'bar' : 'line',
             data: {
@@ -161,8 +165,7 @@ function App() {
               responsive: true,
               plugins: {
                 legend: {
-                  display: true,
-                  position: 'top'
+                  display: false
                 },
                 title: {
                   display: false
@@ -191,6 +194,7 @@ function App() {
       }
     });
     setTrend1Current(trend1LastValue);
+    setTrend4Current(trend4LastValue);
     setStackedCurrents(stackedLastValues);
     return () => {
       chartInstances.forEach(chart => chart.destroy());
@@ -218,8 +222,8 @@ function App() {
               Provider stats
             </Typography>
             <Grid container spacing={3}>
-              <Grid item xs={12} md={6}>
-                <Box display="flex" alignItems="center" justifyContent="center" sx={{ p: 2, maxWidth: 600, mx: 'auto' }}>
+              <Grid item xs={12} lg={6}>
+                <Box display="flex" alignItems="center" justifyContent="center" sx={{ p: 2, flexDirection: { xs: 'column', sm: 'row' } }}>
                   <Box flex={1}>
                     <Typography variant="h6" component="h3" sx={{ mb: 1, textAlign: 'center' }}>
                       Trend Chart 1
@@ -248,7 +252,7 @@ function App() {
                     </Box>
                   </Box>
               </Grid>
-              <Grid item xs={12} md={6}>
+              <Grid item xs={12} lg={6}>
                 <Box sx={{ height: 350, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', p: 2 }}>
                     <Typography variant="h6" component="h3" sx={{ mb: 1, textAlign: 'center' }}>
                       Interactive Globe
@@ -270,8 +274,8 @@ function App() {
               Additional Provider Metrics
             </Typography>
             <Grid container spacing={3}>
-              <Grid item xs={12} md={6}>
-                <Box display="flex" alignItems="center" justifyContent="center" sx={{ p: 2 }}>
+              <Grid item xs={12} lg={6}>
+                <Box display="flex" alignItems="center" justifyContent="center" sx={{ p: 2, flexDirection: { xs: 'column', sm: 'row' } }}>
                   <Box flex={1}>
                     <Typography variant="h6" component="h3" sx={{ mb: 1, textAlign: 'center' }}>
                       Trend Chart 3 (Stacked)
@@ -291,22 +295,23 @@ function App() {
                       <canvas id="trendChart3" width="400" height="250"></canvas>
                     </Box>
                     <Box flex={1} sx={{ textAlign: 'center' }}>
-                      <Typography variant="h5" component="div" color="primary" sx={{ mb: 1, fontSize: '1.5rem' }}>
-                        Current Values
-                      </Typography>
                       {stackedCurrents.length > 0 ? (
                         stackedCurrents.map((val, idx) => (
-                          <Typography key={idx} variant="body1" component="div" sx={{ color: `rgba(${[255,99,132,54,162,235,255,206,86,75,192,192,153,102,255][idx*3]},${[255,99,132,54,162,235,255,206,86,75,192,192,153,102,255][idx*3+1]},${[255,99,132,54,162,235,255,206,86,75,192,192,153,102,255][idx*3+2]},1)`, fontSize: '1rem' }}>
-                            Series {idx + 1}: {val}
-                          </Typography>
+                          <Box key={idx} display="flex" alignItems="center" justifyContent="center" sx={{ mb: 1 }}>
+                            <Box sx={{ width: 16, height: 16, borderRadius: '50%', bgcolor: `rgba(${[255,99,132,54,162,235,255,206,86,75,192,192,153,102,255][idx*3]},${[255,99,132,54,162,235,255,206,86,75,192,192,153,102,255][idx*3+1]},${[255,99,132,54,162,235,255,206,86,75,192,192,153,102,255][idx*3+2]},1)`, display: 'inline-block', mr: 1, border: '1px solid #bbb' }} />
+                            <Typography variant="body1" component="span" sx={{ color: 'text.primary', fontSize: '1rem', ml: 1 }}>
+                              Series {idx + 1}: {val}
+                            </Typography>
+                          </Box>
                         ))
                       ) : '--'}
                     </Box>
                   </Box>
               </Grid>
-              <Grid item xs={12} md={6}>
-                <Box sx={{ width: '80%', mx: 'auto', p: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-                  <Typography variant="h6" component="h3" sx={{ mb: 1, textAlign: 'center' }}>
+              <Grid item xs={12} lg={6}>
+                <Box display="flex" alignItems="center" justifyContent="center" sx={{ p: 2, flexDirection: { xs: 'column', sm: 'row' } }}>
+                  <Box flex={1}>
+                    <Typography variant="h6" component="h3" sx={{ mb: 1, textAlign: 'center' }}>
                       Bar Chart 4
                     </Typography>
                     {/* Time window selection */}
@@ -321,9 +326,16 @@ function App() {
                         </button>
                       ))}
                     </Box>
-                    <Box sx={{ mt: 2, width: '100%' }}>
-                      <canvas id="trendChart4" width="400" height="250" style={{ width: '100%', height: 'auto', display: 'block', margin: '0 auto' }}></canvas>
-                    </Box>
+                    <canvas id="trendChart4" width="400" height="250"></canvas>
+                  </Box>
+                  <Box flex={1} sx={{ textAlign: 'center' }}>
+                    <Typography variant="h2" component="div" color="primary">
+                      {trend4Current !== null ? trend4Current : '--'}
+                    </Typography>
+                    <Typography variant="subtitle1" color="textSecondary">
+                      Current Value
+                    </Typography>
+                  </Box>
                 </Box>
               </Grid>
             </Grid>
