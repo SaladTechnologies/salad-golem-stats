@@ -45,7 +45,7 @@ export function TrendChart({ id, title, trendWindow, setTrendWindow, currentValu
     if (unitType === 'front' && unit) {
       valueDisplay = (
         <Box display="flex" alignItems="center">
-          <Typography variant="body2" sx={{ fontSize: '1.2rem', color: 'text.secondary', mr: 0.5 }}>{unit}</Typography>
+          <Typography variant="body2" sx={{ fontSize: '1.2rem', color: 'primary.main', mr: 0.5 }}>{unit}</Typography>
           <Typography variant="h4" color="primary" sx={{ fontWeight: 500 }}>{currentValue}</Typography>
         </Box>
       );
@@ -53,7 +53,7 @@ export function TrendChart({ id, title, trendWindow, setTrendWindow, currentValu
       valueDisplay = (
         <Box display="flex" flexDirection="column" alignItems="center">
           <Typography variant="h4" color="primary" sx={{ fontWeight: 500 }}>{currentValue}</Typography>
-          <Typography variant="body2" sx={{ fontSize: '1.1rem', color: 'text.secondary', mt: 0.5 }}>{unit}</Typography>
+          <Typography variant="body2" sx={{ fontSize: '1.1rem', color: 'primary.main', mt: 0.5 }}>{unit}</Typography>
         </Box>
       );
     } else {
