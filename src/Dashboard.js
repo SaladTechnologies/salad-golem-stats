@@ -73,6 +73,7 @@ return (
             <Tabs value={selectedTab} onChange={(e, v) => setSelectedTab(v)} textColor="inherit" indicatorColor="secondary">
               <Tab label="Network" />
               <Tab label="Supply" />
+              <Tab label="Supplier Chefs" />
             </Tabs>
           </Box>
           {selectedTab === 0 && (
@@ -176,6 +177,19 @@ return (
                 </Grid>
                 <Grid item xs={12} md={6}>
                   <StackedChart id="supplyMemoryChart" title="Memory (GB)" trendWindow={trendWindows.memory} setTrendWindow={win => setTrendWindows(w => ({ ...w, memory: win }))} labels={["Running", "Available"]} />
+                </Grid>
+              </Grid>
+            </Paper>
+          )}
+          {selectedTab === 2 && (
+            <Paper elevation={2} sx={{ mb: 4, borderRadius: 4, p: 4, bgcolor: '#fff', maxWidth: '96vw', mx: 'auto' }}>
+              <Typography variant="h4" component="h2" sx={{ mb: 3 }}>Supplier Chefs</Typography>
+              <Grid container spacing={3}>
+                <Grid item xs={12} md={6}>
+                  <TrendChart id="meanEarningsChart" title="Mean Earnings per Machine (8hr min)" trendWindow={trendWindows.meanEarnings ?? 'month'} setTrendWindow={win => setTrendWindows(w => ({ ...w, meanEarnings: win }))} currentValue={null} setCurrentValue={() => {}} unit="$" unitType="front" />
+                </Grid>
+                <Grid item xs={12} md={6}>
+                  <StackedChart id="earningsByGpuChart" title="Earnings by GPU ($)" trendWindow={trendWindows.earningsByGpu ?? 'month'} setTrendWindow={win => setTrendWindows(w => ({ ...w, earningsByGpu: win }))} labels={["5090s", "4090s", "3090s", "3060s", "Other GPU", "Non-GPU workloads"]} />
                 </Grid>
               </Grid>
             </Paper>
