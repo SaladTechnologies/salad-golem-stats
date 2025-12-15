@@ -71,6 +71,11 @@ class LoadStats(BaseModel):
 
 from datetime import datetime, timedelta
 
+# For random/placeholder data
+import random
+from fastapi import Request
+from typing import Any
+
 # Total CPU Cores
 @app.get("/metrics/total_cpu_cores")
 def get_total_cpu_cores(period: str = Query("day", enum=["day", "week", "month"], description="Time period: day, week, or month")):
@@ -179,6 +184,65 @@ def post_load_stats(stats: LoadStats):
     return {"status": "ok"}
 
 
-if __name__ == "__main__":
+@app.get("/metrics/transactions")
+def get_transactions(
+    limit: int = Query(10, ge=1, le=100),
+    start: Optional[str] = Query(None, description="Start datetime ISO8601 (default: 1 day ago)"),
+    end: Optional[str] = Query(None, description="End datetime ISO8601 (default: now)")
+):
+    """
+    Returns a list of placeholder transaction records for demo/testing.
+    """
+    # Parse start/end or use defaults
+    now = datetime.utcnow()
+    if end:
+        end_dt = datetime.fromisoformat(end)
+    else:
+        end_dt = now
+    if start:
+        start_dt = datetime.fromisoformat(start)
+    else:
+        start_dt = end_dt - timedelta(days=1)
 
+    # Generate placeholder transactions
+    providers = [
+        "0x0B220b82F3eA3B7F6d9A1D8ab58930C064A2b5Bf",
+        "0xA1B2c3D4E5F678901234567890abcdef12345678",
+        "0xBEEF1234567890abcdef1234567890ABCDEF1234"
+    ]
+    requesters = [
+        "0xD50f254E7E6ABe1527879c2E4E23B9984c783295",
+        "0xC0FFEE1234567890abcdef1234567890ABCDEF12",
+        "0xDEADBEEF1234567890abcdef1234567890ABCDEF"
+    ]
+    gpus = ["RTX 4090", "RTX 4080", "RTX 3090", "RTX 3060", "A100", "Other"]
+    txs = [
+        "0xe3f9e48f556dbec85b0031ddbb157893eb4f4bb1564577a7f36ef19834790986",
+        "0xabc1234567890abcdef1234567890abcdef1234567890abcdef1234567890ab",
+        "0xdef9876543210abcdef1234567890abcdef1234567890abcdef1234567890cd"
+    ]
+
+    transactions = []
+    total_seconds = int((end_dt - start_dt).total_seconds())
+    for i in range(limit):
+        # Random timestamp in range
+        ts_offset = random.randint(0, max(1, total_seconds))
+        ts = (start_dt + timedelta(seconds=ts_offset)).replace(microsecond=0)
+        duration_minutes = random.randint(5, 120)
+        duration = timedelta(minutes=duration_minutes)
+        transactions.append({
+            "ts": ts.isoformat(),
+            "provider_wallet": random.choice(providers),
+            "requester_wallet": random.choice(requesters),
+            "tx": random.choice(txs),
+            "gpu": random.choice(gpus),
+            "ram": random.choice([8192, 16384, 20480, 32768, 65536]),
+            "vcpus": random.choice([4, 8, 16, 32]),
+            "duration": str(duration),
+            "invoiced_glm": round(random.uniform(0.5, 10.0), 2),
+            "invoiced_dollar": round(random.uniform(0.1, 5.0), 2),
+        })
+    return {"transactions": transactions}
+
+if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

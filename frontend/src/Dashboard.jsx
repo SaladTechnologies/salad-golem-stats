@@ -8,6 +8,7 @@ import * as THREE from 'three';
 import { Container, Typography, Box, Paper, Grid, ThemeProvider, createTheme, Tabs, Tab, CssBaseline, GlobalStyles } from '@mui/material';
 import { TrendChart, StackedChart } from './charts.jsx';
 import { generateRandomData, generateStackedData } from './data';
+import TransactionsTable from './TransactionsTable.jsx';
 
 // Simple CSV parser for node_count_by_city.csv
 function parseCityCSV(text) {
@@ -84,6 +85,20 @@ const theme = createTheme({
 export default function Dashboard() {
 	// State for city node data
 	const [cityData, setCityData] = useState([]);
+
+	// State for transactions data
+	const [transactions, setTransactions] = useState([]);
+
+	// Fetch transactions on mount
+	useEffect(() => {
+		fetch(`${import.meta.env.VITE_STATS_API_URL}/metrics/transactions?limit=10`)
+			.then(res => res.ok ? res.json() : Promise.reject('Failed to fetch transactions'))
+			.then(data => setTransactions(data.transactions || []))
+			.catch(err => {
+				console.error('Error loading transactions:', err);
+				setTransactions([]);
+			});
+	}, []);
 
 	// Load city node count data from API endpoint on mount
 	useEffect(() => {
@@ -291,7 +306,14 @@ export default function Dashboard() {
 									hexSideColor={() => saladPalette.darkGreen}
 								/>
 							</Box>
-							{/* Usage Section */}
+							{/* Transactions Table */}
+							<Box sx={{ mt: 4, width: '100%' }}>
+								<Typography variant="h5" sx={{ mb: 2, color: theme.palette.primary.main, fontSize: '1.25rem' }}>
+									Transactions
+								</Typography>
+								<Box sx={{ width: '90%', borderBottom: '2px solid rgb(219,243,193)', mb: 1 }} className="w-clearfix" />
+								<TransactionsTable data={transactions} />
+							</Box>
 							<Typography variant="h5" sx={{ mt: 2, mb: 1, color: theme.palette.primary.main, fontSize: '1.25rem' }} className="w-block">Usage</Typography>
 							<Box sx={{ width: '90%', borderBottom: '2px solid rgb(219,243,193)', mb: 1 }} className="w-clearfix" />
 							<Grid container spacing={3} justifyContent="center">
