@@ -44,41 +44,59 @@ def get_metrics(
     Returns a time series for the given metric (for the 'all' gpu_group), as a list of {ts, value} dicts.
     Allowed metrics: total_time_seconds, total_invoice_amount, total_ram_hours, total_cpu_hours, total_transaction_count
     """
-    print(gpu)
     now = datetime.utcnow()
+    print(metric)
+    if (metric in [
+                    "total_time_seconds",
+                    "total_invoice_amount",
+                    "total_ram_hours",
+                    "total_cpu_hours",
+                    "total_transaction_count"
+                    ]
+        ): 
+        table = "hourly_gpu_stats"
+        if (period == "day" or period == "week"):
+            ts_col = "hour"
+        else: 
+            ts_col = "day"
+    
+    elif metric in [
+                    "unique_node_count",
+                    "unique_node_ram",
+                    "unique_node_cpu"
+                    ]:  
+        if (period == "day" or period == "week"):
+            table = "hourly_distinct_counts"
+            ts_col = "hour"
+        else:
+            table = "daily_distinct_counts"
+            ts_col = "day"
+    else:
+        print(metric)
+
     if period == "day":
         since = now - timedelta(days=1)
-        table = "hourly_gpu_stats"
-        ts_col = "hour"
-        query = f"""
-            SELECT {ts_col}, {metric} FROM {table}
-            WHERE gpu_group = %s AND {ts_col} >= %s
-            ORDER BY {ts_col} ASC
-        """
-        params = (gpu, since)
     elif period == "week":
         since = now - timedelta(weeks=1)
-        table = "hourly_gpu_stats"
-        ts_col = "hour"
-        query = f"""
-            SELECT {ts_col}, {metric} FROM {table}
-            WHERE gpu_group = %s AND {ts_col} >= %s
-            ORDER BY {ts_col} ASC
-        """
-        params = (gpu, since)
     elif period == "month":
         since = now - timedelta(days=31)
-        ts_col = "hour"
-        table = "hourly_gpu_stats"
-        # Aggregate by day from hourly_gpu_stats
+
+    params = (gpu, since)
+
+    if table == "hourly_gpu_stats" and ts_col == "day":
         query = f"""
             SELECT DATE(hour) as day, SUM({metric}) as value
             FROM {table}
-            WHERE gpu_group = %s AND {ts_col} >= %s
+            WHERE gpu_group = %s AND hour >= %s
             GROUP BY day
-            ORDER BY day ASC
+            ORDER BY {ts_col} ASC
         """
-        params = (gpu, since)
+    else:
+        query = f"""
+        SELECT {ts_col}, {metric} FROM {table}
+        WHERE gpu_group = %s AND {ts_col} >= %s
+        ORDER BY {ts_col} ASC
+    """
 
     with get_db_conn() as conn:
         with conn.cursor() as cur:
@@ -101,7 +119,10 @@ def assemble_metrics(
         "total_invoice_amount",
         "total_ram_hours",
         "total_cpu_hours",
-        "total_transaction_count"
+        "total_transaction_count",
+        "unique_node_count",
+        "unique_node_ram",
+        "unique_node_cpu"
     ]
 
     allowed_periods = ["day", "week", "month"]

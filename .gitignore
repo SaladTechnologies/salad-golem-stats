@@ -32,3 +32,4 @@ data-collection/data/country_geocode_cache.json
 data-collection/data/node_count_by_city.csv
 data-collection/data/node_count_by_country.csv
 frontend/.env
+data-collection/data/plans.db
