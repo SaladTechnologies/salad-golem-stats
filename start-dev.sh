@@ -12,6 +12,7 @@ sleep 5
 # Apply init migration
 echo "Applying DB migrations..."
 docker exec -i dev-postgres psql -U devuser -d statsdb -f /migrations/001_init.sql
+docker exec -i dev-postgres psql -U devuser -d statsdb -f /migrations/002_hourly_daily_stats.sql
 
 echo "Starting backend..."
 cd ../backend

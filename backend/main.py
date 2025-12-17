@@ -1,3 +1,18 @@
+
+from fastapi import FastAPI, HTTPException, Query, Response
+from pydantic import BaseModel
+import uvicorn
+from typing import List, Optional, Any
+import os
+import psycopg2
+import json
+from fastapi.middleware.cors import CORSMiddleware
+from dotenv import load_dotenv
+from datetime import datetime, timedelta
+import random
+
+load_dotenv()
+
 # Helper for metric endpoints
 def get_metric_trend(metric_name, response_key, period):
     now = datetime.utcnow()
@@ -20,24 +35,16 @@ def get_metric_trend(metric_name, response_key, period):
                 (metric_name, since.isoformat())
             )
             rows = cur.fetchall()
+            print(rows)
             if rows:
                 return {response_key: [{"ts": r[0], "value": r[1]} for r in rows]}
             raise HTTPException(status_code=404, detail=f"No data found for {metric_name}")
 
-from fastapi import FastAPI, HTTPException, Query
-from pydantic import BaseModel
-import uvicorn
-from typing import List, Optional
-import os
-import psycopg2
-import json
-from fastapi.middleware.cors import CORSMiddleware
-from dotenv import load_dotenv
 
 
 app = FastAPI()
 
-load_dotenv() 
+
 origins = os.environ.get("FRONTEND_ORIGINS", "").split(",")
 
 print("Loaded origins:", os.environ.get("FRONTEND_ORIGINS"))
@@ -69,12 +76,126 @@ class LoadStats(BaseModel):
     memory_load: float
     timestamp: Optional[str] = None
 
-from datetime import datetime, timedelta
+def get_metrics(
+    metric: str,
+    period: str = Query("day", enum=["day", "week", "month"], description="Time period: day, week, or month")
+):
+    """
+    Returns a time series for the given metric (for the 'all' gpu_group), as a list of {ts, value} dicts.
+    Allowed metrics: total_time_seconds, total_invoice_amount, total_ram_hours, total_cpu_hours, total_transaction_count
+    """
 
-# For random/placeholder data
-import random
-from fastapi import Request
-from typing import Any
+    now = datetime.utcnow()
+    if period == "day":
+        since = now - timedelta(days=1)
+        table = "hourly_gpu_stats"
+        ts_col = "hour"
+        query = f"""
+            SELECT {ts_col}, {metric} FROM {table}
+            WHERE gpu_group = %s AND {ts_col} >= %s
+            ORDER BY {ts_col} ASC
+        """
+        params = ("all", since)
+    elif period == "week":
+        since = now - timedelta(weeks=1)
+        table = "hourly_gpu_stats"
+        ts_col = "hour"
+        query = f"""
+            SELECT {ts_col}, {metric} FROM {table}
+            WHERE gpu_group = %s AND {ts_col} >= %s
+            ORDER BY {ts_col} ASC
+        """
+        params = ("all", since)
+    elif period == "month":
+        since = now - timedelta(days=31)
+        # Aggregate by day from hourly_gpu_stats
+        query = f"""
+            SELECT DATE(hour) as day, SUM({metric}) as value
+            FROM hourly_gpu_stats
+            GROUP BY day
+            ORDER BY day ASC
+        """
+        params = ("all", since)
+
+    print("[DEBUG] SQL Query:", query)
+    print("[DEBUG] Params:", params)
+    with get_db_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(query, params)
+            rows = cur.fetchall()
+            print(f"[DEBUG] Rows returned for metric '{metric}':", len(rows))
+            if len(rows) > 0:
+                print("[DEBUG] First row:", rows[0])
+            return {metric: [{"ts": r[0], "value": r[1]} for r in rows]}
+
+# Generalized endpoint for hourly/daily GPU stats (for 'all' group)
+@app.get("/metrics/stats")
+def assemble_metrics(
+    period: str = Query("day", enum=["day", "week", "month"], description="Time period: day, week, or month")
+):
+    """
+    Returns a time series for the given metric (for the 'all' gpu_group), as a list of {ts, value} dicts.
+    Allowed metrics: total_time_seconds, total_invoice_amount, total_ram_hours, total_cpu_hours, total_transaction_count
+    """
+    metrics = [
+        "total_time_seconds",
+        "total_invoice_amount",
+        "total_ram_hours",
+        "total_cpu_hours",
+        "total_transaction_count"
+    ]
+
+    allowed_periods = ["day", "week", "month"]
+
+    if period not in allowed_periods:
+        raise HTTPException(status_code=400, detail=f"Invalid period. Allowed: {allowed_periods}")
+    
+    now = datetime.utcnow()
+    assembled_metrics = {}
+    for metric in metrics:
+        assembled_metrics[metric] = get_metrics(
+            metric=metric,
+            period=period
+        )[metric]
+    return assembled_metrics
+
+
+@app.get("/metrics/unique_nodes")
+def get_unique_nodes(period: str = Query("day", enum=["day", "week", "month"], description="Time period: day, week, or month")):
+    """
+    Returns unique node counts for the 'all' gpu_group, as a list of {ts, value} dicts.
+    - For 'day' and 'week', uses hourly_distinct_counts (ts = hour)
+    - For 'month', uses daily_distinct_counts (ts = day)
+    """
+    from datetime import datetime, timedelta
+    now = datetime.utcnow()
+    if period == "day":
+        since = now - timedelta(days=1)
+        table = "hourly_distinct_counts"
+        ts_col = "hour"
+    elif period == "week":
+        since = now - timedelta(weeks=1)
+        table = "hourly_distinct_counts"
+        ts_col = "hour"
+    elif period == "month":
+        since = now - timedelta(days=31)
+        table = "daily_distinct_counts"
+        ts_col = "day"
+    else:
+        raise HTTPException(status_code=400, detail="Invalid period")
+    with get_db_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"""
+                SELECT {ts_col}, unique_node_count FROM {table}
+                WHERE gpu_group = %s AND {ts_col} >= %s
+                ORDER BY {ts_col} ASC
+                """,
+                ("all", since)
+            )
+            rows = cur.fetchall()
+            return {"unique_nodes": [{"ts": r[0], "value": r[1]} for r in rows]}
+ 
 
 # Total CPU Cores
 @app.get("/metrics/total_cpu_cores")
@@ -158,31 +279,6 @@ def get_city_counts():
             return [
                 {"city": r[0], "count": r[1], "lat": r[2], "lon": r[3]} for r in rows
             ]
-
-@app.get("/metrics/country_counts")
-def get_country_counts():
-    with get_db_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute("SELECT name, count, lat, long FROM country_snapshots ORDER BY ts DESC LIMIT 1000")
-            rows = cur.fetchall()
-            return [
-                {"country": r[0], "count": r[1], "lat": r[2], "lon": r[3]} for r in rows
-            ]
-
-@app.post("/metrics/load")
-def post_load_stats(stats: LoadStats):
-    # Example: insert into a table called node_load_stats
-    with get_db_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                INSERT INTO node_load_stats (node_id, cpu_load, memory_load, ts)
-                VALUES (%s, %s, %s, NOW())
-                """,
-                (stats.node_id, stats.cpu_load, stats.memory_load)
-            )
-    return {"status": "ok"}
-
 
 @app.get("/metrics/transactions")
 def get_transactions(
