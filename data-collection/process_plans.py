@@ -37,8 +37,7 @@ query = '''
 			CASE WHEN gpu_class_id IS NULL OR gpu_class_id = '' THEN 'no_gpu' ELSE gpu_class_id END AS gpu_group,
 			invoice_amount,
 			ram,
-			cpu,
-			COUNT(*) AS transaction_count
+			cpu
 		FROM node_plan
 	),
 	base_with_resource_hours AS (
@@ -54,7 +53,7 @@ query = '''
 			SUM(invoice_amount) AS total_invoice_amount,
 			SUM(ram_hours) AS total_ram_hours,
 			SUM(cpu_hours) AS total_cpu_hours,
-			SUM(transaction_count) AS total_transaction_count
+			COUNT(*) AS total_transaction_count
 		FROM base_with_resource_hours
 		GROUP BY hour, gpu_group
 	),
@@ -64,7 +63,7 @@ query = '''
 			SUM(invoice_amount) AS total_invoice_amount	,
 			SUM(ram_hours) AS total_ram_hours,
 			SUM(cpu_hours) AS total_cpu_hours,
-			SUM(transaction_count) AS total_transaction_count
+			COUNT(*) AS total_transaction_count
 		FROM base_with_resource_hours
 		WHERE gpu_group != 'no_gpu'
 		GROUP BY hour
@@ -75,7 +74,7 @@ query = '''
 			SUM(invoice_amount) AS total_invoice_amount,
 			SUM(ram_hours) AS total_ram_hours,
 			SUM(cpu_hours) AS total_cpu_hours,
-			SUM(transaction_count) AS total_transaction_count
+			COUNT(*) AS total_transaction_count
 		FROM base_with_resource_hours
 		GROUP BY hour
 	)
@@ -88,11 +87,11 @@ query = '''
 '''
 
 try:
-	# cursor = conn.cursor()
-	# cursor.execute(query)
-	# results = cursor.fetchall()
-	# for row in results:
-	# 	print(f"Day: {row[0]}, GPU Group: {row[1]}, Total time running (s): {row[2]}, Total invoice amount: {row[3]}, Total RAM hours: {row[4]}, Total CPU hours: {row[5]}, Total transactions: {row[6]}")
+	cursor = conn.cursor()
+	cursor.execute(query)
+	results = cursor.fetchall()
+	for row in results:
+		print(f"Hour: {row[0]}, GPU Group: {row[1]}, Total time running (s): {row[2]}, Total invoice amount: {row[3]}, Total RAM hours: {row[4]}, Total CPU hours: {row[5]}, Total transactions: {row[6]}")
 
 	# Additional: daily distinct node counts by GPU class, any-gpu, and no-gpu
 
@@ -141,7 +140,7 @@ try:
 	'''
 	cursor.execute(distinct_hour_query)
 	distinct_hour_results = cursor.fetchall()
-	for row in distinct_hour_results:
+	for row in distinct_hour_results[-50:]:
 		print(f"Hour: {row[0]}, GPU Group: {row[1]}, Unique Nodes: {row[2]}")
 
 	# Daily distinct node counts
@@ -189,7 +188,7 @@ try:
 	'''
 	cursor.execute(distinct_day_query)
 	distinct_day_results = cursor.fetchall()
-	for row in distinct_day_results:
+	for row in distinct_day_results[-50:]:
 		print(f"Day: {row[0]}, GPU Group: {row[1]}, Unique Nodes: {row[2]}")
 
 	cursor.close()
