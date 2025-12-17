@@ -103,7 +103,7 @@ query = '''
 		GROUP BY hour, gpu_group
 	),
 	gpu_total AS (
-		SELECT hour, 'gpu_total' as gpu_group,
+		SELECT hour, 'any_gpu' as gpu_group,
 			SUM(duration) AS total_time_seconds,
 			SUM(invoice_amount) AS total_invoice_amount	,
 			SUM(ram_hours) AS total_ram_hours,
@@ -114,7 +114,7 @@ query = '''
 		GROUP BY hour
 	),
 	total AS (
-		SELECT hour, 'total' as total_group,
+		SELECT hour, 'all' as total_group,
 			SUM(duration) AS total_time_seconds,
 			SUM(invoice_amount) AS total_invoice_amount,
 			SUM(ram_hours) AS total_ram_hours,
@@ -279,7 +279,7 @@ try:
 			row[4], # cpu
 		) for row in distinct_hour_results
 	]
-	insert_daily_distinct_counts(hour_distinct_data)
+	insert_hourly_distinct_counts(hour_distinct_data)
 
 	cursor.close()
 

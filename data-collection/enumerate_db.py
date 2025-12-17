@@ -41,7 +41,27 @@ def print_postgres_tables_info():
         # Get row count
         cur.execute(f"SELECT COUNT(*) FROM {table_name};")
         count = cur.fetchone()[0]
-        print(f"  Number of rows: {count}\n")
+        print(f"  Number of rows: {count}")
+
+        # Print last 5 entries (if any rows)
+        if count > 0:
+            # Get column names for printing
+            col_names = [col[0] for col in columns]
+            # Try to use 'ORDER BY id DESC' if 'id' column exists, else just use no order
+            if 'id' in col_names:
+                order_clause = 'ORDER BY id DESC'
+            elif 'ts' in col_names:
+                order_clause = 'ORDER BY ts DESC'
+            else:
+                order_clause = ''
+            query = f"SELECT * FROM {table_name} {order_clause} LIMIT 5;"
+            cur.execute(query)
+            rows = cur.fetchall()
+            print("  Last 5 entries:")
+            for row in rows:
+                # Print as dict for clarity
+                print("    ", dict(zip(col_names, row)))
+        print()
     cur.close()
     conn.close()
 
