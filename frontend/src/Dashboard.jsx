@@ -25,6 +25,7 @@ import {
 } from '@mui/material';
 import { TrendChart, StackedChart } from './charts.jsx';
 import TransactionsTable from './TransactionsTable.jsx';
+import GlobeComponent from './Globe.jsx';
 
 // Simple CSV parser for node_count_by_city.csv
 function parseCityCSV(text) {
@@ -107,20 +108,9 @@ const createAppTheme = (mode) =>
 
 export default function Dashboard() {
   // Initialize theme from localStorage or system preference
-    // --- Globe View Persistence ---
-    // Try to load saved globe view from localStorage
-    const getInitialGlobeView = () => {
-      try {
-        const saved = localStorage.getItem('globeView');
-        if (saved) {
-          return JSON.parse(saved);
-        }
-      } catch (e) {}
-      // Default: more zoomed in, centered
-      return { lat: 20, lng: 0, altitude: 1.7, rotation: 0 };
-    };
-    const [globeView, setGlobeView] = useState(getInitialGlobeView);
-  const getInitialTheme = () => {
+  
+  
+    const getInitialTheme = () => {
     const saved = localStorage.getItem('theme');
     if (saved) return saved;
 
@@ -189,7 +179,6 @@ export default function Dashboard() {
       .then((res) => (res.ok ? res.json() : Promise.reject('Failed to fetch city data')))
       .then((data) => {
         setCityData(data);
-        console.log('cityData loaded:', data.length, data.slice(0, 3));
       })
       .catch((err) => {
         console.error('Error loading cityData:', err);
@@ -232,32 +221,7 @@ export default function Dashboard() {
     earningsByGpu: 'month',
   });
 
-  // Globe ref for Network
-  const globeNetworkRef = useRef();
 
-  // Ensure globe background matches theme
-  useEffect(() => {
-    if (globeNetworkRef.current && globeNetworkRef.current.scene) {
-      const scene = globeNetworkRef.current.scene();
-      if (scene) scene.background = new THREE.Color(theme.palette.background.default);
-    }
-  }, [theme.palette.background.default]);
-
-  // Save globe view to localStorage on change
-  const handleGlobeViewChange = (view) => {
-    setGlobeView(view);
-    try {
-      localStorage.setItem('globeView', JSON.stringify(view));
-    } catch (e) {}
-  };
-
-  // On first load, set globe to saved view
-  useEffect(() => {
-    if (globeNetworkRef.current) {
-      globeNetworkRef.current.pointOfView(globeView, 0);
-    }
-    // eslint-disable-next-line
-  }, []);
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
@@ -476,7 +440,7 @@ export default function Dashboard() {
             direction="row"
           >
             <Grid
-              size={{ xs: 12, md: 4 }}
+              size={{ xs: 12, md: 6 }}
               sx={{ display: 'flex', flexDirection: 'column', maxWidth: 650 }}
             >
               <Box sx={{ mb: 1, mt: 4 }} className="w-block">
@@ -513,14 +477,14 @@ export default function Dashboard() {
               </Paper>
             </Grid>
             <Grid
-              size={{ xs: 12, md: 8 }}
+              size={{ xs: 12, md: 6 }}
               sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}
             >
               {/* Distribution Section*/}
               <Box
                 sx={{
                   width: '100%',
-                  bgcolor: '#fff',
+                  bgcolor: theme.palette.background.paper,
                   display: 'flex',
                   flexDirection: 'column',
                   alignItems: 'center',
@@ -528,37 +492,7 @@ export default function Dashboard() {
                 }}
                 className="w-block"
               >
-                {(() => {
-                  try {
-                    console.log('Globe props:', {
-                      hexBinResolution: 3,
-                      hexBinPointsDataLength: Array.isArray(cityData) ? cityData.length : 'N/A',
-                      hexBinPointsDataSample: Array.isArray(cityData) ? cityData.slice(0, 3) : 'N/A',
-                      themeMode,
-                      globeView
-                    });
-                  } catch (e) {
-                    console.error('Error logging Globe props:', e);
-                  }
-                  return null;
-                })()}
-                <Globe
-                  ref={globeNetworkRef}
-                  width={480}
-                  height={400}
-                  globeImageUrl={themeMode === 'dark' ? '/earth-night.jpg' : '/earth-light.jpg'}
-                  backgroundColor={theme.palette.background.default}
-                  pointOfView={globeView}
-                  onZoom={handleGlobeViewChange}
-                  onMove={handleGlobeViewChange}
-                  hexBinPointsData={cityData}
-                  hexBinPointLat={(d) => d.lat}
-                  hexBinPointLng={(d) => d.lon}
-                  hexBinResolution={1}
-                  hexAltitude={(d) => Math.min(0.15, d.sumWeight * 0.01)}
-                  hexTopColor={() => themeMode === 'dark' ? saladPalette.midGreen : saladPalette.green}
-                  hexSideColor={() => themeMode === 'dark' ? saladPalette.midGreen : saladPalette.darkGreen}
-                />
+                <GlobeComponent theme={theme} themeMode={themeMode} cityData={cityData} />
               </Box>
             </Grid>
           </Grid>
