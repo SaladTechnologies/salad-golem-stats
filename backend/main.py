@@ -35,17 +35,8 @@ def get_db_conn():
         port=int(os.getenv("POSTGRES_PORT", 5432))
     )
 
-def get_metrics(
-    metric: str,
-    period: str = "day",
-    gpu: str = "all"
-):
-    """
-    Returns a time series for the given metric (for the 'all' gpu_group), as a list of {ts, value} dicts.
-    Allowed metrics: total_time_seconds, total_invoice_amount, total_ram_hours, total_cpu_hours, total_transaction_count
-    """
-    now = datetime.utcnow()
-    print(metric)
+def find_data(metric: str, period: str):
+    now = datetime.utcnow() 
     if (metric in [
                     "total_time_seconds",
                     "total_invoice_amount",
@@ -80,6 +71,66 @@ def get_metrics(
         since = now - timedelta(weeks=1)
     elif period == "month":
         since = now - timedelta(days=31)
+
+    return( {"since": since, "table": table, "ts_col": ts_col} )
+
+
+def get_metrics_by_gpu(
+    metric: str,
+    period: str = "day"
+):
+
+    # query for all the GPUs in the time range. 
+    # find the totals by GPU group
+
+
+    # This function will fetch metrics grouped by GPU
+    now = datetime.utcnow()
+    if period == "day":
+        since = now - timedelta(days=1)
+    elif period == "week":
+        since = now - timedelta(weeks=1)
+    elif period == "month":
+        since = now - timedelta(days=31)
+    else:
+        since = now - timedelta(days=1)
+
+    query = f"""
+        SELECT gpu_group, {metric}, {period} FROM hourly_gpu_stats
+        WHERE {period} >= %s
+        GROUP BY gpu_group, {period}
+        ORDER BY {period} ASC
+    """
+
+    with get_db_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(query, (since,))
+            rows = cur.fetchall()
+            result = {}
+            for r in rows:
+                gpu_group = r[0]
+                if gpu_group not in result:
+                    result[gpu_group] = []
+                result[gpu_group].append({"ts": r[2], "value": r[1]})
+            return result
+
+
+def get_metrics(
+    metric: str,
+    period: str = "day",
+    gpu: str = "all"
+):
+    """
+    Returns a time series for the given metric (for the 'all' gpu_group), as a list of {ts, value} dicts.
+    Allowed metrics: total_time_seconds, total_invoice_amount, total_ram_hours, total_cpu_hours, total_transaction_count
+    """
+
+    print(metric)
+   
+    data_info = find_data(metric=metric, period=period)
+    table = data_info["table"]
+    ts_col = data_info["ts_col"]
+    since = data_info["since"]
 
     params = (gpu, since)
 
@@ -214,4 +265,4 @@ def get_transactions(
     return {"transactions": transactions}
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)

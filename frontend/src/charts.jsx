@@ -2,7 +2,7 @@
 // Uses Material-UI, Chart.js, and custom data generators
 
 import React from 'react';
-import { Box, Typography } from '@mui/material';
+import { Box, Typography, useTheme } from '@mui/material';
 import { Chart } from 'chart.js/auto';
 import { generateRandomData, generateStackedData } from './data';
 
@@ -22,6 +22,12 @@ const plotHeight = 300;
  *   unitType: 'front'|'below' (optional) - unit display style
  */
 export function TrendChart({ id, title, trendWindow, setTrendWindow, trendData, unit, unitType }) {
+    const theme = useTheme();
+    const isDark = theme.palette.mode === 'dark';
+    
+    // Use lighter green for current values in dark mode
+    const valueColor = isDark ? 'rgb(178,213,48)' : 'rgb(31, 79, 34)';
+    
     // Determine y-axis scale and label formatting
     function getYAxisFormat(maxVal) {
       if (maxVal >= 1e12) return { title: 'Trillions', factor: 1e12, suffix: 'T' };
@@ -81,13 +87,25 @@ export function TrendChart({ id, title, trendWindow, setTrendWindow, trendData, 
               title: { display: false },
               ticks: {
                 autoSkip: true,
-                maxTicksLimit: 5
+                maxTicksLimit: 5,
+                color: isDark ? 'rgba(255, 255, 255, 0.6)' : 'rgba(0, 0, 0, 0.7)'
               },
+              grid: {
+                color: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'
+              }
             },
             y: {
-              title: { display: !!yFormat.title, text: yFormat.title },
+              title: { 
+                display: !!yFormat.title, 
+                text: yFormat.title,
+                color: isDark ? 'rgba(255, 255, 255, 0.6)' : 'rgba(0, 0, 0, 0.7)'
+              },
               beginAtZero: true,
+              grid: {
+                color: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'
+              },
               ticks: {
+                color: isDark ? 'rgba(255, 255, 255, 0.6)' : 'rgba(0, 0, 0, 0.7)',
                 callback: function(value) {
                   if (yFormat.factor === 1) return value.toLocaleString();
                   const v = value / yFormat.factor;
@@ -163,20 +181,20 @@ export function TrendChart({ id, title, trendWindow, setTrendWindow, trendData, 
     if (unitType === 'front' && formattedUnit) {
       valueDisplay = (
         <Box display="flex" alignItems="center">
-          <Typography variant="body2" sx={{ fontSize: '1.2rem', color: 'rgb(31, 79, 34)', mr: 0.5, fontWeight: 700 }}>{formattedUnit}</Typography>
-            <Typography variant="h4" sx={{ fontWeight: 700, color: 'rgb(31, 79, 34)', fontSize: '2.5rem' }}>{formattedValue}</Typography>
+          <Typography variant="body2" sx={{ fontSize: '1.2rem', color: valueColor, mr: 0.5, fontWeight: 700 }}>{formattedUnit}</Typography>
+            <Typography variant="h4" sx={{ fontWeight: 700, color: valueColor, fontSize: '2.5rem' }}>{formattedValue}</Typography>
         </Box>
       );
     } else if (unitType === 'below' && formattedUnit) {
       valueDisplay = (
         <Box display="flex" flexDirection="column" alignItems="center">
-            <Typography variant="h4" sx={{ fontWeight: 700, color: 'rgb(31, 79, 34)', fontSize: '2.5rem' }}>{formattedValue}</Typography>
-          <Typography variant="body2" sx={{ fontSize: '1.1rem', color: 'rgb(31, 79, 34)', mt: 0.5, fontWeight: 700 }}>{formattedUnit}</Typography>
+            <Typography variant="h4" sx={{ fontWeight: 700, color: valueColor, fontSize: '2.5rem' }}>{formattedValue}</Typography>
+          <Typography variant="body2" sx={{ fontSize: '1.1rem', color: valueColor, mt: 0.5, fontWeight: 700 }}>{formattedUnit}</Typography>
         </Box>
       );
     } else {
       valueDisplay = (
-          <Typography variant="h4" sx={{ fontWeight: 700, color: 'rgb(31, 79, 34)', fontSize: '2.5rem' }}>{formattedValue}</Typography>
+          <Typography variant="h4" sx={{ fontWeight: 700, color: valueColor, fontSize: '2.5rem' }}>{formattedValue}</Typography>
       );
     }
   }
@@ -191,7 +209,7 @@ export function TrendChart({ id, title, trendWindow, setTrendWindow, trendData, 
   return (
     <Box display="flex" flexDirection="column" alignItems="center" justifyContent="center" sx={{ width: '100%' }} className="w-block">
       <Box display="flex" alignItems="center" sx={{ mb: 1, width: '100%' }}>
-        <Typography variant="h6" component="h3" sx={{ textAlign: 'left', color: 'rgb(83,166,38)' }} className="w-block">{title}</Typography>
+        <Typography variant="h6" component="h3" sx={{ textAlign: 'left', color: theme.palette.primary.main }} className="w-block">{title}</Typography>
         <Typography variant="body2" sx={{ color: '#aaa', fontSize: '0.95rem', ml: 2 }}>
           {timeLabels[trendWindow] || 'last month'}
         </Typography>
@@ -221,6 +239,8 @@ export function TrendChart({ id, title, trendWindow, setTrendWindow, trendData, 
  *   labels: array - series labels
  */
 export function StackedChart({ id, title, trendWindow, setTrendWindow, labels }) {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
   const [chartData, setChartData] = React.useState(null);
   const [currents, setCurrents] = React.useState([]);
   const [isNarrow, setIsNarrow] = React.useState(typeof window !== 'undefined' ? window.innerWidth < 1400 : false);
@@ -286,13 +306,25 @@ export function StackedChart({ id, title, trendWindow, setTrendWindow, labels })
               title: { display: false },
               ticks: {
                 autoSkip: true,
-                maxTicksLimit: 5
+                maxTicksLimit: 5,
+                color: isDark ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.7)'
               },
+              grid: {
+                color: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'
+              }
             },
             y: {
-              title: { display: !!yFormat.title, text: yFormat.title },
+              title: { 
+                display: !!yFormat.title, 
+                text: yFormat.title,
+                color: isDark ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.7)'
+              },
               beginAtZero: true,
+              grid: {
+                color: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'
+              },
               ticks: {
+                color: isDark ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.7)',
                 callback: function(value) {
                   if (yFormat.factor === 1) return value.toLocaleString();
                   const v = value / yFormat.factor;
@@ -320,7 +352,7 @@ export function StackedChart({ id, title, trendWindow, setTrendWindow, labels })
   return (
     <Box display="flex" flexDirection="column" alignItems="center" justifyContent="center" sx={{ width: '100%' }} className="w-block">
       <Box display="flex" alignItems="center" sx={{ mb: 1 }}>
-        <Typography variant="h6" component="h3" sx={{ textAlign: 'left', color: 'rgb(83,166,38)', flex: '0 0 70%' }} className="w-block">{title}</Typography>
+        <Typography variant="h6" component="h3" sx={{ textAlign: 'left', color: theme.palette.primary.main, flex: '0 0 70%' }} className="w-block">{title}</Typography>
         <Box display="flex" alignItems="center" sx={{ gap: 1, flex: '0 0 auto', ml: 2 }}>
           {timeOptions.map(opt => (
             <button
@@ -372,7 +404,7 @@ export function StackedChart({ id, title, trendWindow, setTrendWindow, labels })
               currents.map((val, idx) => (
                 <Box key={idx} display="flex" alignItems="center" justifyContent="center" sx={{ mb: 1, mx: 2 }} className="w-inline-block">
                   <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: legendColors[idx % legendColors.length], display: 'inline-block', mr: 1, border: '1px solid #bbb' }} />
-                  <Typography variant="body2" component="span" sx={{ color: 'rgb(31, 79, 34)', fontSize: '0.875rem', mr: 1, fontWeight: 700 }}>
+                  <Typography variant="body2" component="span" sx={{ color: theme.palette.text.primary, fontSize: '0.875rem', mr: 1, fontWeight: 700 }}>
                     {labels[idx]}: {val}
                   </Typography>
                 </Box>

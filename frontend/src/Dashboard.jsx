@@ -8,7 +8,7 @@ const gpuVramLabels = ["24GB", "12GB", "8GB", "<8GB"];
 import React, { useState, useRef, useEffect } from 'react';
 import Globe from 'react-globe.gl';
 import * as THREE from 'three';
-import { Container, Typography, Box, Paper, Grid, ThemeProvider, createTheme, Tabs, Tab, CssBaseline, GlobalStyles } from '@mui/material';
+import { Container, Typography, Box, Paper, Grid, ThemeProvider, createTheme, Tabs, Tab, CssBaseline, GlobalStyles, Switch, FormControlLabel } from '@mui/material';
 import { TrendChart, StackedChart } from './charts.jsx';
 import { generateRandomData, generateStackedData } from './data';
 import TransactionsTable from './TransactionsTable.jsx';
@@ -37,9 +37,10 @@ const saladPalette = {
 	navy: 'rgb(10,33,51)',         // Deep navy for backgrounds
 };
 
-// Material-UI theme with custom palette
-const theme = createTheme({
+// Material-UI theme functions for light and dark modes
+const createAppTheme = (mode) => createTheme({
 	palette: {
+		mode,
 		primary: {
 			main: saladPalette.green,
 			dark: saladPalette.darkGreen,
@@ -50,15 +51,15 @@ const theme = createTheme({
 			main: saladPalette.lime,
 			dark: saladPalette.green,
 			light: saladPalette.lightGreen,
-			contrastText: saladPalette.navy,
+			contrastText: mode === 'dark' ? '#fff' : saladPalette.navy,
 		},
 		background: {
-			default: '#fff',
-			paper: '#fff',
+			default: mode === 'dark' ? '#121212' : '#fff',
+			paper: mode === 'dark' ? '#121212' : '#fff',
 		},
 		text: {
-			primary: saladPalette.navy,
-			secondary: saladPalette.darkGreen,
+			primary: mode === 'dark' ? 'rgba(255, 255, 255, 0.85)' : saladPalette.navy,
+			secondary: mode === 'dark' ? '#b0b0b0' : saladPalette.darkGreen,
 		},
 		salad: saladPalette, // custom for direct access
 	},
@@ -86,10 +87,32 @@ const theme = createTheme({
 });
 
 export default function Dashboard() {
+	// Initialize theme from localStorage or system preference
+	const getInitialTheme = () => {
+		const saved = localStorage.getItem('theme');
+		if (saved) return saved;
+		
+		// Fallback to system preference
+		if (typeof window !== 'undefined' && window.matchMedia) {
+			return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+		}
+		return 'light';
+	};
+
 	// Global time window state for all charts
 	const [globalTimeWindow, setGlobalTimeWindow] = useState('month');
 	// Loading state for time selector
 	const [isLoadingTimeData, setIsLoadingTimeData] = useState(false);
+	// Theme mode state with persistence
+	const [themeMode, setThemeMode] = useState(getInitialTheme);
+	
+	// Save theme to localStorage when it changes
+	useEffect(() => {
+		localStorage.setItem('theme', themeMode);
+	}, [themeMode]);
+	
+	// Create theme based on current mode
+	const theme = createAppTheme(themeMode);
 	
 	// Helper to fetch stats summary for the bottom section
 	function useStatsSummary(period = 'month', gpu = 'all') {
@@ -177,26 +200,16 @@ export default function Dashboard() {
 		earningsByGpu: 'month',
 	});
 
-	// Globe refs for Network and Supply
+	// Globe ref for Network
 	const globeNetworkRef = useRef();
-	const globeSupplyRef = useRef();
 
-	// Ensure globe backgrounds are white
+	// Ensure globe background matches theme
 	useEffect(() => {
 		if (globeNetworkRef.current && globeNetworkRef.current.scene) {
 			const scene = globeNetworkRef.current.scene();
-			if (scene) scene.background = new THREE.Color('#fff');
+			if (scene) scene.background = new THREE.Color(theme.palette.background.default);
 		}
-	}, [globeNetworkRef]);
-
-	useEffect(() => {
-		if (globeSupplyRef.current && globeSupplyRef.current.scene) {
-			const scene = globeSupplyRef.current.scene();
-			if (scene) scene.background = new THREE.Color('#fff');
-		}
-	}, [globeSupplyRef]);
-
-
+	}, [theme.palette.background.default]);
 	return (
 		<ThemeProvider theme={theme}>
 			<CssBaseline />
@@ -275,7 +288,7 @@ export default function Dashboard() {
 				<a href="https://portal.salad.com" target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', height: '100%' }}>
 					<img src="/salad-logo-light-4x-DpLeJfaD.png" alt="Salad Logo" style={{ height: 46.15, width: 'auto', display: 'block' }} />
 				</a>
-				<Box sx={{ display: 'flex', gap: 1, mr: 3 }}>
+				<Box sx={{ display: 'flex', gap: 1, mr: 3, alignItems: 'center' }}>
 					{[{key: 'day', label: '1d'}, {key: 'week', label: '7d'}, {key: 'month', label: '1m'}].map(opt => (
 						<button
 							key={opt.key}
@@ -300,6 +313,35 @@ export default function Dashboard() {
 							{opt.label}
 						</button>
 					))}
+					<Box sx={{ ml: 2, borderLeft: '1px solid #666', pl: 2 }}>
+						<FormControlLabel
+							control={
+								<Switch
+									checked={themeMode === 'dark'}
+									onChange={(e) => setThemeMode(e.target.checked ? 'dark' : 'light')}
+									size="small"
+									sx={{
+										'& .MuiSwitch-switchBase.Mui-checked': {
+											color: saladPalette.green,
+										},
+										'& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
+											backgroundColor: saladPalette.green,
+										}
+									}}
+								/>
+							}
+							label={themeMode === 'dark' ? '🌙' : '☀'}
+							labelPlacement="start"
+							sx={{
+								color: '#fff',
+								m: 0,
+								'& .MuiFormControlLabel-label': {
+									fontSize: '1.1rem',
+									mr: 1
+								}
+							}}
+						/>
+					</Box>
 				</Box>
 			</Box>
 			<Box
@@ -341,10 +383,12 @@ export default function Dashboard() {
 							<Box sx={{ width: '100%', bgcolor: '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center', mb: 0 }} className="w-block">
 								{/* Minimal Globe.gl bars example: one bar at equator */}
 								<Globe
-									width={480}
-									height={400}
-									globeImageUrl="/earth-light.jpg"
-									backgroundColor="#fff"
+								ref={globeNetworkRef}
+								width={480}
+								height={400}
+								globeImageUrl={themeMode === 'dark' ? "/earth-night.jpg" : "/earth-light.jpg"}
+								backgroundColor={theme.palette.background.default}
+								pointOfView={{ altitude: 1.5 }}
 									hexBinPointsData={cityData}
 									hexBinPointLat={d => d.lat}
 									hexBinPointLng={d => d.lon}
@@ -358,17 +402,17 @@ export default function Dashboard() {
 					   </Grid>
 
 					{/* Network Content */}
-					<Paper elevation={2} sx={{ pt: 1, mb: 4, borderRadius: 4, px: 4, pb: 4, bgcolor: theme.palette.background.paper, maxWidth: '96vw', mx: 'auto' }} className="w-block">
+					<Paper elevation={2} sx={{ pt: 1, mb: 4, borderRadius: 4, px: 4, pb: 4, bgcolor: theme.palette.background.paper, border: `1px solid ${theme.palette.mode === 'dark' ? '#333' : '#e0e0e0'}`, backgroundImage: 'none', maxWidth: '96vw', mx: 'auto' }} className="w-block">
 							{/* Transactions Table */}
 							<Box sx={{ width: '100%' }}>
 								<Typography variant="h5" sx={{ mb: 0.5, color: theme.palette.primary.main, fontSize: '1.25rem' }}>
 									Network Transactions
 								</Typography>
-								<Box sx={{ width: '90%', borderBottom: '2px solid rgb(219,243,193)', mb: 1 }} className="w-clearfix" />
+								<Box sx={{ width: '90%', borderBottom: `2px solid ${theme.palette.mode === 'dark' ? 'rgba(219,243,193,0.3)' : 'rgb(219,243,193)'}`, mb: 1 }} className="w-clearfix" />
 								<TransactionsTable data={transactions} />
 							</Box>
 							<Typography variant="h5" sx={{ mt: 2, mb: 0.5, color: theme.palette.primary.main, fontSize: '1.25rem' }} className="w-block">Overall Usage</Typography>
-							<Box sx={{ width: '90%', borderBottom: '2px solid rgb(219,243,193)', mb: 1 }} className="w-clearfix" />
+							<Box sx={{ width: '90%', borderBottom: `2px solid ${theme.palette.mode === 'dark' ? 'rgba(219,243,193,0.3)' : 'rgb(219,243,193)'}`, mb: 1 }} className="w-clearfix" />
 							<Grid container spacing={3} justifyContent="center">
 							{statsSummary ? (
 								<>
@@ -411,7 +455,7 @@ export default function Dashboard() {
 								)}
 							</Grid>
 							<Typography variant="h5" sx={{ mt: 2, mb: .5, color: theme.palette.primary.main, fontSize: '1.25rem' }} className="w-block">Available in Test</Typography>
-							<Box sx={{ width: '90%', borderBottom: '2px solid rgb(219,243,193)', mb: 1 }} className="w-clearfix" />
+							<Box sx={{ width: '90%', borderBottom: `2px solid ${theme.palette.mode === 'dark' ? 'rgba(219,243,193,0.3)' : 'rgb(219,243,193)'}`, mb: 1 }} className="w-clearfix" />
 							<Grid container spacing={3} justifyContent="center">
 							{statsSummary ? (
 								<>
@@ -455,7 +499,7 @@ export default function Dashboard() {
 							</Grid>
 							{/* Compute Resources Utilized Section */}
 							<Typography variant="h5" sx={{ mt: 4, mb: .5, color: theme.palette.primary.main, fontSize: '1.25rem' }} className="w-block">Resource Usage</Typography>
-							<Box sx={{ width: '90%', borderBottom: '2px solid rgb(219,243,193)', mb: 1 }} className="w-clearfix" />
+							<Box sx={{ width: '90%', borderBottom: `2px solid ${theme.palette.mode === 'dark' ? 'rgba(219,243,193,0.3)' : 'rgb(219,243,193)'}`, mb: 1 }} className="w-clearfix" />
 							<Grid container spacing={3} justifyContent="center">
 								<Grid item xs={12} md={6}>
 									<StackedChart id="gpuStackedChart" title="Utilized GPUs by Model" trendWindow={globalTimeWindow} setTrendWindow={() => {}} labels={gpuModelLabels} />

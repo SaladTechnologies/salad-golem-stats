@@ -71,7 +71,7 @@ export default function TransactionsTable({ data }) {
   });
 
 return (
-    <TableContainer component={Paper} sx={{ mt: 4, mb: 4, boxShadow: 'none', borderRadius: 4 }}>
+    <TableContainer component={Paper} sx={{ mt: 4, mb: 4, boxShadow: 'none', borderRadius: 4, backgroundImage: 'none' }}>
         <Table size="small" sx={{ fontSize: '12px' }}>
             <TableHead>
                 {table.getHeaderGroups().map(headerGroup => (
