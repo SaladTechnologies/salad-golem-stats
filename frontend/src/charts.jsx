@@ -340,11 +340,13 @@ export function StackedChart({ id, title, trendWindow, setTrendWindow, labels, c
   // Truncate labels to 8 characters with ellipsis, remove RTX/GTX prefix and parenthetical for legend only
   function legendLabel(label) {
     if (!label) return label;
+    // Remove RTX/GTX prefix (case-insensitive, with or without space)
+    let clean = label.replace(/^(rtx|gtx)\s*/i, '');
     // Extract parenthetical (e.g., (8GB)) if present
-    const parenMatch = label.match(/\([^)]*\)/);
+    const parenMatch = clean.match(/\([^)]*\)/);
     const paren = parenMatch ? parenMatch[0] : '';
     // Remove parenthetical for truncation, but add it back after
-    let clean = label.replace(/\s*\([^)]*\)/g, '').trim();
+    clean = clean.replace(/\s*\([^)]*\)/g, '').trim();
     const maxLen = 24;
     let result = clean;
     if (clean.length > maxLen) {
