@@ -37,6 +37,18 @@ def get_db_conn():
     )
 
 
+# Load GPU class names once at startup
+gpu_class_names = {}
+try:
+    with get_db_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT gpu_class_id, gpu_class_name FROM gpu_classes")
+            for row in cur.fetchall():
+                gpu_class_names[row[0]] = row[1]
+except Exception as e:
+    print(f"Warning: Could not load gpu_class_names at startup: {e}")
+
+
 def get_table_parameters(metric: str, period: str):
     now = datetime.utcnow()
     if metric in [
@@ -125,11 +137,27 @@ def get_metrics_by_gpu(metric: str, period: str = "month"):
                 if gpu_group in top_group_names:
                     group_entries[gpu_group].append(entry)
                 else:
-                    other_entries.append(entry)
-            for g in top_group_names:
-                output.append({"gpu_group": g, "values": group_entries[g]})
+                    # Sum values for the same timestamp in 'other'
+                    found = False
+                    for other_entry in other_entries:
+                        if other_entry["ts"] == entry["ts"]:
+                            other_entry["value"] += value or 0
+                            found = True
+                            break
+                    if not found:
+                        other_entries.append({"ts": entry["ts"], "value": value or 0})
+            # Only send the readable name as the group
+            for gpu_group in top_group_names:
+                label = gpu_class_names.get(gpu_group, None)
+                if label is None:
+                    print(
+                        f"[WARNING] gpu_group '{gpu_group}' not found in gpu_class_names, using fallback."
+                    )
+                    label = gpu_group
+                output.append({"group": label, "values": group_entries[gpu_group]})
             if other_entries:
-                output.append({"gpu_group": "other", "values": other_entries})
+                output.append({"group": "other", "values": other_entries})
+
             return {metric: output}
 
 
@@ -138,8 +166,6 @@ def get_metrics(metric: str, period: str = "day", gpu: str = "all"):
     Returns a time series for the given metric (for the 'all' gpu_group), as a list of {ts, value} dicts.
     Allowed metrics: total_time_seconds, total_invoice_amount, total_ram_hours, total_cpu_hours, total_transaction_count
     """
-
-    print(metric)
 
     query_info = get_table_parameters(metric=metric, period=period)
     table = query_info["table"]

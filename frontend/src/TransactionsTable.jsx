@@ -60,7 +60,7 @@ export default function TransactionsTable({ data }) {
         header: 'RAM (GB)',
         cell: (info) => {
           const v = info.getValue();
-          return v ? (Number(v) / 1024).toFixed(1) : '';
+          return v ? Math.round(Number(v) / 1024) : '';
         },
       },
       { accessorKey: 'vcpus', header: 'vCPUs' },

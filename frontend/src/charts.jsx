@@ -101,9 +101,7 @@ export function TrendChart({ id, title, trendWindow, setTrendWindow, trendData, 
             },
             y: {
               title: {
-                display: !!yFormat.title,
-                text: yFormat.title,
-                color: isDark ? 'rgba(255, 255, 255, 0.6)' : 'rgba(0, 0, 0, 0.7)',
+                display: false,
               },
               beginAtZero: true,
               grid: {
@@ -306,11 +304,7 @@ export function TrendChart({ id, title, trendWindow, setTrendWindow, trendData, 
  *   setTrendWindow: function - updates time window
  *   labels: array - series labels
  */
-export function StackedChart({ id, title, trendWindow, setTrendWindow, labels, chartData }) {
-    // Debug: print labels prop
-    React.useEffect(() => {
-      console.log('StackedChart labels prop:', labels);
-    }, [labels]);
+export function StackedChart({ id, title, trendWindow, setTrendWindow, labels, chartData, unit }) {
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
   const [internalChartData, setInternalChartData] = React.useState(null);
@@ -343,10 +337,21 @@ export function StackedChart({ id, title, trendWindow, setTrendWindow, labels, c
     }
   }
 
-  // Truncate labels to 8 characters with ellipsis
-  function truncateLabel(label) {
-    if (!label || label.length <= 8) return label;
-    return label.substring(0, 8) + '...';
+  // Truncate labels to 8 characters with ellipsis, remove RTX/GTX prefix and parenthetical for legend only
+  function legendLabel(label) {
+    if (!label) return label;
+    // Extract parenthetical (e.g., (8GB)) if present
+    const parenMatch = label.match(/\([^)]*\)/);
+    const paren = parenMatch ? parenMatch[0] : '';
+    // Remove parenthetical for truncation, but add it back after
+    let clean = label.replace(/\s*\([^)]*\)/g, '').trim();
+    const maxLen = 24;
+    let result = clean;
+    if (clean.length > maxLen) {
+      result = clean.substring(0, maxLen) + '...';
+    }
+    // Add back parenthetical if present
+    return paren ? result + ' ' + paren : result;
   }
 
   // Use provided chartData only
@@ -406,9 +411,7 @@ export function StackedChart({ id, title, trendWindow, setTrendWindow, labels, c
             y: {
               stacked: true,
               title: {
-                display: !!yFormat.title,
-                text: yFormat.title,
-                color: isDark ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.7)',
+                display: false,
               },
               beginAtZero: true,
               grid: {
@@ -496,7 +499,7 @@ export function StackedChart({ id, title, trendWindow, setTrendWindow, labels, c
             <Typography variant="caption" sx={{ color: '#aaa', fontSize: '0.8rem', mb: 1, display: 'block' }}>
               {trendWindow === 'day' ? 'last hour:' : 'last day:'}
             </Typography>
-            {currents.length > 0
+            {currents.length > 0 && internalChartData && internalChartData.datasets
               ? currents.map((val, idx) => (
                   <Box
                     key={idx}
@@ -527,7 +530,7 @@ export function StackedChart({ id, title, trendWindow, setTrendWindow, labels, c
                         fontWeight: 400,
                       }}
                     >
-                      <span style={{ fontWeight: 700 }}>{val}</span> {truncateLabel(labels[idx])}
+                      <span style={{ fontWeight: 700 }}>{val}</span> {legendLabel(internalChartData.datasets[idx]?.label)}
                     </Typography>
                   </Box>
                 ))
@@ -549,7 +552,7 @@ export function StackedChart({ id, title, trendWindow, setTrendWindow, labels, c
               {trendWindow === 'day' ? 'last hour' : 'last day'}
             </Typography>
             <Box sx={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center' }}>
-              {currents.length > 0
+              {currents.length > 0 && internalChartData && internalChartData.datasets
                 ? currents.map((val, idx) => (
                     <Box
                       key={idx}
@@ -580,7 +583,7 @@ export function StackedChart({ id, title, trendWindow, setTrendWindow, labels, c
                           fontWeight: 400,
                         }}
                       >
-                        <span style={{ fontWeight: 700 }}>{val}</span> {truncateLabel(labels[idx])}
+                        <span style={{ fontWeight: 700 }}>{val}</span> {legendLabel(internalChartData.datasets[idx]?.label)}
                       </Typography>
                     </Box>
                   ))

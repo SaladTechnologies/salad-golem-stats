@@ -153,7 +153,7 @@ export default function Dashboard() {
   function getGpuModelStackedDataFromStats(statsSummary) {
     if (!statsSummary || !statsSummary.gpu_unique_node_count) return null;
     const data = statsSummary.gpu_unique_node_count;
-    // data: [ { gpu_group, values: [ {ts, value}, ... ] }, ... ]
+    // data: [ { group, values: [ {ts, value}, ... ] }, ... ]
     // Collect all unique timestamps for x-axis
     const allTimestamps = Array.from(
       new Set(
@@ -161,19 +161,19 @@ export default function Dashboard() {
       )
     ).sort();
     // GPU group names as labels (for legend)
-    const groupLabels = data.map((groupObj) => groupObj.gpu_group);
-    
+    const groupLabels = data.map((groupObj) => groupObj.group);
+
     // Calculate total values for each GPU group to sort by highest to lowest
     const groupTotals = data.map((groupObj) => {
       const total = groupObj.values.reduce((sum, v) => sum + (v.value || 0), 0);
       return { groupObj, total };
     }).sort((a, b) => b.total - a.total);
-    
+
     // Use the same 6-color green gradient as the legend (lightest to darkest for highest to lowest)
     const legendColors = ['#b2d530', '#9acc35', '#7bb82e', '#53a626', '#3d6b28', '#1f4f22'];
-    
+
     const datasets = groupTotals.map((item, i) => ({
-      label: item.groupObj.gpu_group,
+      label: item.groupObj.group,
       data: allTimestamps.map((ts) => {
         const found = item.groupObj.values.find((v) => v.ts === ts);
         return found ? found.value : 0;
@@ -183,8 +183,9 @@ export default function Dashboard() {
       borderWidth: 1,
       fill: true,
     }));
+
     // Return both x-axis (timestamps) and legend labels (gpu groups) with sorted order
-    return { labels: allTimestamps, datasets, groupLabels: groupTotals.map(item => item.groupObj.gpu_group) };
+    return { labels: allTimestamps, datasets, groupLabels: groupTotals.map(item => item.groupObj.group) };
   }
 
   const statsSummary = useStatsSummary(globalTimeWindow, 'all');
@@ -567,7 +568,7 @@ export default function Dashboard() {
                   <Grid size={{ xs: 12, sm: 6 }}>
                     <TrendChart
                       id="trend-total-transaction-count"
-                      title="Total Transaction Count"
+                      title="Total Transaction Count (tx)"
                       trendWindow={globalTimeWindow}
                       setTrendWindow={() => {}}
                       trendData={
@@ -583,7 +584,7 @@ export default function Dashboard() {
                   <Grid size={{ xs: 12, sm: 6 }}>
                     <TrendChart
                       id="trend-total-time-seconds"
-                      title="Total Compute Time"
+                      title="Total Compute Time (sec)"
                       trendWindow={globalTimeWindow}
                       setTrendWindow={() => {}}
                       trendData={
@@ -634,7 +635,7 @@ export default function Dashboard() {
                   <Grid size={{ xs: 12, sm: 6 }}>
                     <TrendChart
                       id="unique_node_ram"
-                      title="Unique Node RAM"
+                      title="Unique Node RAM (GB)"
                       trendWindow={globalTimeWindow}
                       setTrendWindow={() => {}}
                       trendData={
@@ -647,7 +648,7 @@ export default function Dashboard() {
                   <Grid size={{ xs: 12, sm: 6 }}>
                     <TrendChart
                       id="unique_node_cpu"
-                      title="Unique Node CPU"
+                      title="Unique Node CPU (CPU cores)"
                       trendWindow={globalTimeWindow}
                       setTrendWindow={() => {}}
                       trendData={
@@ -690,6 +691,7 @@ export default function Dashboard() {
                     setTrendWindow={() => {}}
                     chartData={gpuModelStackedData}
                     labels={gpuModelStackedData.groupLabels}
+                    unit="nodes"
                   />
                 ) : (
                   <Typography variant="body2" color="textSecondary">
@@ -708,7 +710,7 @@ export default function Dashboard() {
                   <Grid size={{ xs: 12, sm: 6 }}>
                     <TrendChart
                       id="trend-total-cpu-hours"
-                      title="Total CPU Hours"
+                      title="Total CPU Hours (CPU-hr)"
                       trendWindow={globalTimeWindow}
                       setTrendWindow={() => {}}
                       trendData={
@@ -721,7 +723,7 @@ export default function Dashboard() {
                   <Grid size={{ xs: 12, sm: 6 }}>
                     <TrendChart
                       id="trend-total-ram-hours"
-                      title="Total RAM Hours"
+                      title="Total RAM Hours (GB-hr)"
                       trendWindow={globalTimeWindow}
                       setTrendWindow={() => {}}
                       trendData={
