@@ -40,7 +40,8 @@ CREATE TABLE IF NOT EXISTS gpu_classes (
     medium_price DOUBLE PRECISION,
     high_price DOUBLE PRECISION,
     gpu_type TEXT,
-    gpu_class_name TEXT NOT NULL
+    gpu_class_name TEXT NOT NULL,
+    vram_gb INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS city_snapshots (

@@ -84,7 +84,7 @@ def get_table_parameters(metric: str, period: str):
     return {"since": since, "table": table, "ts_col": ts_col}
 
 
-def get_metrics_by_gpu(metric: str, period: str = "month"):
+def get_metrics_by_gpu(metric: str, period: str = "month", group_by: str = "gpu"):
 
     # query for all the GPUs in the time range.
     # find the totals by GPU group
@@ -115,7 +115,65 @@ def get_metrics_by_gpu(metric: str, period: str = "month"):
         with conn.cursor() as cur:
             cur.execute(query, params)
             rows = cur.fetchall()
-            # Sum up the metric for each gpu_group
+
+            if group_by == "vram":
+                # Build a mapping from gpu_group to VRAM (as string, e.g., '24 GB')
+                gpu_to_vram = {}
+                for gpu_id, name in gpu_class_names.items():
+                    # Try to extract VRAM from the name, e.g., 'RTX 4090 (24 GB)' -> '24 GB'
+                    import re
+
+                    match = re.search(r"\((\d+\s*[gG][bB])\)", name)
+                    if match:
+                        vram = match.group(1).replace(" ", "")  # e.g., '24GB'
+                    else:
+                        vram = "Unknown"
+                    gpu_to_vram[gpu_id] = vram
+
+                # Aggregate by VRAM
+                vram_group_sums = {}
+                vram_entries = {}
+                for r in rows:
+                    gpu_group = r[0]
+                    ts = r[1] if len(r) > 2 else r[0]
+                    value = r[2] if len(r) > 2 else r[1]
+                    vram = gpu_to_vram.get(gpu_group, "Unknown")
+                    vram_group_sums[vram] = vram_group_sums.get(vram, 0) + (value or 0)
+                    if vram not in vram_entries:
+                        vram_entries[vram] = {}
+                    if ts not in vram_entries[vram]:
+                        vram_entries[vram][ts] = 0
+                    vram_entries[vram][ts] += value or 0
+
+                # Find top 5 VRAM groups
+                top_vram_groups = sorted(
+                    vram_group_sums.items(), key=lambda x: x[1], reverse=True
+                )[:5]
+                top_vram_names = set(v for v, _ in top_vram_groups)
+                output = []
+                for vram in top_vram_names:
+                    values = [
+                        {"ts": ts, "value": v}
+                        for ts, v in sorted(vram_entries[vram].items())
+                    ]
+                    output.append({"group": vram, "values": values})
+                # Aggregate all other VRAMs into 'other'
+                other_vram_entries = {}
+                for vram in vram_entries:
+                    if vram not in top_vram_names:
+                        for ts, v in vram_entries[vram].items():
+                            if ts not in other_vram_entries:
+                                other_vram_entries[ts] = 0
+                            other_vram_entries[ts] += v
+                if other_vram_entries:
+                    values = [
+                        {"ts": ts, "value": v}
+                        for ts, v in sorted(other_vram_entries.items())
+                    ]
+                    output.append({"group": "other", "values": values})
+                return {metric: output}
+
+            # Default: group by GPU (original behavior)
             group_sums = {}
             for r in rows:
                 gpu_group = r[0]
@@ -227,6 +285,9 @@ def assemble_metrics(
         "unique_node_count",
         "total_time_seconds",
     ]
+    vram_metrics = [
+        "unique_node_count",
+    ]
 
     allowed_periods = ["day", "week", "month"]
 
@@ -245,6 +306,12 @@ def assemble_metrics(
         assembled_metrics["gpu_" + metric] = get_metrics_by_gpu(
             metric=metric, period=period
         )[metric]
+
+    for metric in vram_metrics:
+        assembled_metrics["vram_" + metric] = get_metrics_by_gpu(
+            metric=metric, period=period, group_by="vram"
+        )[metric]
+
     return assembled_metrics
 
 

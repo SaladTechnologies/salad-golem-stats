@@ -54,18 +54,29 @@ def main():
     with conn:
         with conn.cursor() as cur:
             for uuid, gpu in published_gpu_classes.items():
+                # Preprocess vram_gb value
+                vram_gb = gpu.get("vram_gb")
+                if vram_gb is None:
+                    name = gpu.get("name", "")
+                    if "(" in name and "GB" in name:
+                        try:
+                            vram_gb = int(name.split("(")[-1].split("GB")[0].strip())
+                        except Exception:
+                            vram_gb = None
+
                 cur.execute(
                     """
                     INSERT INTO gpu_classes (
-                        gpu_class_id, batch_price, low_price, medium_price, high_price, gpu_type, gpu_class_name
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+                        gpu_class_id, batch_price, low_price, medium_price, high_price, gpu_type, gpu_class_name, vram_gb
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (gpu_class_id) DO UPDATE SET
                         batch_price = EXCLUDED.batch_price,
                         low_price = EXCLUDED.low_price,
                         medium_price = EXCLUDED.medium_price,
                         high_price = EXCLUDED.high_price,
                         gpu_type = EXCLUDED.gpu_type,
-                        gpu_class_name = EXCLUDED.gpu_class_name
+                        gpu_class_name = EXCLUDED.gpu_class_name,
+                        vram_gb = EXCLUDED.vram_gb
                     """,
                     (
                         uuid,
@@ -75,6 +86,7 @@ def main():
                         gpu.get("highPrice"),
                         gpu.get("gpuClassType"),
                         gpu.get("name"),
+                        vram_gb,
                     ),
                 )
 
