@@ -77,16 +77,10 @@ def get_metrics_by_gpu(metric: str, period: str = "day"):
     # query for all the GPUs in the time range.
     # find the totals by GPU group
 
-    # This function will fetch metrics grouped by GPU
-    now = datetime.utcnow()
-    if period == "day":
-        since = now - timedelta(days=1)
-    elif period == "week":
-        since = now - timedelta(weeks=1)
-    elif period == "month":
-        since = now - timedelta(days=31)
-    else:
-        since = now - timedelta(days=1)
+    data_info = find_data(metric=metric, period=period)
+    table = data_info["table"]
+    ts_col = data_info["ts_col"]
+    since = data_info["since"]
 
     query = f"""
         SELECT gpu_group, {metric}, {period} FROM hourly_gpu_stats

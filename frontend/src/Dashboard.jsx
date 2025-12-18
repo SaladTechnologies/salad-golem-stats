@@ -24,7 +24,6 @@ import {
   FormControlLabel,
 } from '@mui/material';
 import { TrendChart, StackedChart } from './charts.jsx';
-import { generateRandomData, generateStackedData } from './data';
 import TransactionsTable from './TransactionsTable.jsx';
 
 // Simple CSV parser for node_count_by_city.csv
@@ -190,6 +189,7 @@ export default function Dashboard() {
       .then((res) => (res.ok ? res.json() : Promise.reject('Failed to fetch city data')))
       .then((data) => {
         setCityData(data);
+        console.log('cityData loaded:', data.length, data.slice(0, 3));
       })
       .catch((err) => {
         console.error('Error loading cityData:', err);
@@ -476,9 +476,7 @@ export default function Dashboard() {
             direction="row"
           >
             <Grid
-              item
-              xs={12}
-              md={4}
+              size={{ xs: 12, md: 4 }}
               sx={{ display: 'flex', flexDirection: 'column', maxWidth: 650 }}
             >
               <Box sx={{ mb: 1, mt: 4 }} className="w-block">
@@ -497,32 +495,25 @@ export default function Dashboard() {
                   SaladCloud Network Statistics
                 </Typography>
               </Box>
-              <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', minHeight: 400 }}>
+              <Paper elevation={0} sx={{ p: 3, bgcolor: theme.palette.background.paper, borderRadius: 3, border: 'none', boxShadow: 'none', width: '100%' }}>
                 <Typography
                   variant="body1"
-                  sx={{ textAlign: 'left', color: theme.palette.text.primary }}
-                  className="w-block"
+                  sx={{
+                    color: theme.palette.text.primary,
+                    textAlign: 'justify',
+                    fontSize: '1.08rem',
+                    letterSpacing: 0.01,
+                    lineHeight: 1.7,
+                  }}
                 >
-                  {/* Introductory  text */}
-                  This page provides summary statistics from SaladCloud’s testing on the Golem
-                  Network. These tests support a broader initiative to evaluate the use of the GLM
-                  token for facilitating compute transactions across SaladCloud.
-                  <br />
-                  <br />
-                  SaladCloud is a Web2 distributed cloud computing platform enabling customers to
-                  run workloads including text-to-image, text-to-video, molecular simulations, and
-                  zero-knowledge proofs. SaladCloud nodes are worldwide, as seen in the distribution
-                  daily active SaladCloud nodes in the globe to the right in the full network. The
-                  data presented represents a subset of participating customers (requestors) and
-                  network nodes (providers), and includes test compute transactions executed
-                  on-chain using GLM.
+                  This page provides summary statistics from SaladCloud’s testing on the Golem Network. These tests support a broader initiative to evaluate the use of the GLM token for facilitating compute transactions across SaladCloud.
+                  <br /><br />
+                  SaladCloud is a Web2 distributed cloud computing platform enabling customers to run workloads including text-to-image, text-to-video, molecular simulations, and zero-knowledge proofs. SaladCloud nodes are worldwide, as seen in the distribution of daily active SaladCloud nodes in the globe to the right in the full network. The data presented represents a subset of participating customers (requestors) and network nodes (providers), and includes test compute transactions executed on-chain using GLM.
                 </Typography>
-              </Box>
+              </Paper>
             </Grid>
             <Grid
-              item
-              xs={12}
-              md={8}
+              size={{ xs: 12, md: 8 }}
               sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}
             >
               {/* Distribution Section*/}
@@ -537,7 +528,20 @@ export default function Dashboard() {
                 }}
                 className="w-block"
               >
-                {/* Minimal Globe.gl bars example: one bar at equator */}
+                {(() => {
+                  try {
+                    console.log('Globe props:', {
+                      hexBinResolution: 3,
+                      hexBinPointsDataLength: Array.isArray(cityData) ? cityData.length : 'N/A',
+                      hexBinPointsDataSample: Array.isArray(cityData) ? cityData.slice(0, 3) : 'N/A',
+                      themeMode,
+                      globeView
+                    });
+                  } catch (e) {
+                    console.error('Error logging Globe props:', e);
+                  }
+                  return null;
+                })()}
                 <Globe
                   ref={globeNetworkRef}
                   width={480}
@@ -550,7 +554,7 @@ export default function Dashboard() {
                   hexBinPointsData={cityData}
                   hexBinPointLat={(d) => d.lat}
                   hexBinPointLng={(d) => d.lon}
-                  hexBinResolution={3}
+                  hexBinResolution={1}
                   hexAltitude={(d) => Math.min(0.15, d.sumWeight * 0.01)}
                   hexTopColor={() => themeMode === 'dark' ? saladPalette.midGreen : saladPalette.green}
                   hexSideColor={() => themeMode === 'dark' ? saladPalette.midGreen : saladPalette.darkGreen}
@@ -612,7 +616,7 @@ export default function Dashboard() {
             <Grid container spacing={3} justifyContent="center">
               {statsSummary ? (
                 <>
-                  <Grid item xs={12} sm={6}>
+                  <Grid size={{ xs: 12, sm: 6 }}>
                     <TrendChart
                       id="trend-total-invoice-amount"
                       title="Fees ($)"
@@ -626,7 +630,7 @@ export default function Dashboard() {
                       unitType="front"
                     />
                   </Grid>
-                  <Grid item xs={12} sm={6}>
+                  <Grid size={{ xs: 12, sm: 6 }}>
                     <TrendChart
                       id="trend-total-transaction-count"
                       title="Total Transaction Count"
@@ -642,7 +646,7 @@ export default function Dashboard() {
                       unitType="below"
                     />
                   </Grid>
-                  <Grid item xs={12} sm={6}>
+                  <Grid size={{ xs: 12, sm: 6 }}>
                     <TrendChart
                       id="trend-total-time-seconds"
                       title="Total Compute Time"
@@ -680,7 +684,7 @@ export default function Dashboard() {
             <Grid container spacing={3} justifyContent="center">
               {statsSummary ? (
                 <>
-                  <Grid item xs={12} sm={6}>
+                  <Grid size={{ xs: 12, sm: 6 }}>
                     <TrendChart
                       id="unique_node_count"
                       title="Unique Node Count"
@@ -693,7 +697,7 @@ export default function Dashboard() {
                       unitType="front"
                     />
                   </Grid>
-                  <Grid item xs={12} sm={6}>
+                  <Grid size={{ xs: 12, sm: 6 }}>
                     <TrendChart
                       id="unique_node_ram"
                       title="Unique Node RAM"
@@ -706,7 +710,7 @@ export default function Dashboard() {
                       unitType="below"
                     />
                   </Grid>
-                  <Grid item xs={12} sm={6}>
+                  <Grid size={{ xs: 12, sm: 6 }}>
                     <TrendChart
                       id="unique_node_cpu"
                       title="Unique Node CPU"
@@ -743,7 +747,7 @@ export default function Dashboard() {
               className="w-clearfix"
             />
             <Grid container spacing={3} justifyContent="center">
-              <Grid item xs={12} md={6}>
+              <Grid size={{ xs: 12, md: 6 }}>
                 <StackedChart
                   id="gpuStackedChart"
                   title="Utilized GPUs by Model"
@@ -757,7 +761,7 @@ export default function Dashboard() {
                   sx={{ textAlign: 'center', mt: 1 }}
                 />
               </Grid>
-              <Grid item xs={12} md={6}>
+              <Grid size={{ xs: 12, md: 6 }}>
                 <StackedChart
                   id="gpuVramChart"
                   title="Utilized GPUs by VRAM (count)"
@@ -768,7 +772,7 @@ export default function Dashboard() {
               </Grid>
               {statsSummary ? (
                 <>
-                  <Grid item xs={12} sm={6}>
+                  <Grid size={{ xs: 12, sm: 6 }}>
                     <TrendChart
                       id="trend-total-cpu-hours"
                       title="Total CPU Hours"
@@ -781,7 +785,7 @@ export default function Dashboard() {
                       unitType="below"
                     />
                   </Grid>
-                  <Grid item xs={12} sm={6}>
+                  <Grid size={{ xs: 12, sm: 6 }}>
                     <TrendChart
                       id="trend-total-ram-hours"
                       title="Total RAM Hours"
