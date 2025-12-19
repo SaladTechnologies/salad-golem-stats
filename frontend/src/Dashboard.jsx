@@ -622,7 +622,7 @@ export default function Dashboard() {
                       trendWindow={globalTimeWindow}
                       setTrendWindow={() => {}}
                       trendData={statsSummary.total_time_seconds || []}
-                      unit="s"
+                      unit="sec"
                       unitType="below"
                       isLoading={isLoading}
                     />

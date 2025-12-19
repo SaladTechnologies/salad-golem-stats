@@ -9,6 +9,12 @@ import { Chart } from 'chart.js/auto';
 // Default plot height for all charts
 const plotHeight = 300;
 
+// Consistent axis styling for all charts
+const getAxisColors = (isDark) => ({
+  tick: isDark ? 'rgba(255, 255, 255, 0.6)' : 'rgba(0, 0, 0, 0.6)',
+  grid: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
+});
+
 // Format dates specifically for tooltips (more detailed)
 const formatTooltipDate = (timestamp, window) => {
   const date = new Date(timestamp);
@@ -171,20 +177,20 @@ export function TrendChart({
               ticks: {
                 autoSkip: true,
                 maxTicksLimit: 5,
-                color: isDark ? 'rgba(255, 255, 255, 0.6)' : 'rgba(0, 0, 0, 0.7)',
+                color: getAxisColors(isDark).tick,
               },
               grid: {
-                color: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
+                color: getAxisColors(isDark).grid,
               },
             },
             y: {
               title: { display: false },
               beginAtZero: true,
               grid: {
-                color: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
+                color: getAxisColors(isDark).grid,
               },
               ticks: {
-                color: isDark ? 'rgba(255, 255, 255, 0.6)' : 'rgba(0, 0, 0, 0.7)',
+                color: getAxisColors(isDark).tick,
                 callback: function (value) {
                   if (yFormat.factor === 1) return value.toLocaleString();
                   const v = value / yFormat.factor;
@@ -239,18 +245,10 @@ export function TrendChart({
     if (chartRef.current) {
       const chart = chartRef.current;
       const isDark = theme.palette.mode === 'dark';
-      chart.options.scales.x.ticks.color = isDark
-        ? 'rgba(255, 255, 255, 0.6)'
-        : 'rgba(0, 0, 0, 0.7)';
-      chart.options.scales.x.grid.color = isDark
-        ? 'rgba(255, 255, 255, 0.1)'
-        : 'rgba(0, 0, 0, 0.1)';
-      chart.options.scales.y.grid.color = isDark
-        ? 'rgba(255, 255, 255, 0.1)'
-        : 'rgba(0, 0, 0, 0.1)';
-      chart.options.scales.y.ticks.color = isDark
-        ? 'rgba(255, 255, 255, 0.6)'
-        : 'rgba(0, 0, 0, 0.7)';
+      chart.options.scales.x.ticks.color = getAxisColors(isDark).tick;
+      chart.options.scales.x.grid.color = getAxisColors(isDark).grid;
+      chart.options.scales.y.grid.color = getAxisColors(isDark).grid;
+      chart.options.scales.y.ticks.color = getAxisColors(isDark).tick;
       // Update tooltip config with current theme and timestamps
       const originalTimestamps = trendData.map((d) => d.x);
       chart.options.plugins.tooltip = getTooltipConfig(isDark, originalTimestamps, trendWindow);
@@ -362,7 +360,7 @@ export function TrendChart({
       display="flex"
       flexDirection="column"
       alignItems="flex-start"
-      justifyContent="center"
+      justifyContent="left"
       sx={{ width: '100%' }}
       className="w-block"
     >
@@ -375,7 +373,10 @@ export function TrendChart({
         >
           {title}
         </Typography>
-        <Typography variant="body2" sx={{ color: '#aaa', fontSize: '0.95rem', ml: 2 }}>
+        <Typography
+          variant="body2"
+          sx={{ color: getAxisColors(isDark).tick, fontSize: '0.95rem', ml: 2 }}
+        >
           {timeLabels[trendWindow] || 'last month'}
         </Typography>
       </Box>
@@ -383,11 +384,10 @@ export function TrendChart({
         <Typography
           variant="body2"
           sx={{
-            color: '#aaa',
+            color: getAxisColors(isDark).tick,
             fontSize: '0.95rem',
             mb: 2,
             textAlign: 'left',
-            opacity: 1,
             lineHeight: 1.4,
           }}
         >
@@ -398,7 +398,7 @@ export function TrendChart({
         display="flex"
         flexDirection={{ xs: 'column', sm: 'row' }}
         alignItems="center"
-        justifyContent="center"
+        justifyContent="flex-start"
         sx={{ width: '100%', maxWidth: 800, mb: 1, mx: 'auto' }}
         className="w-clearfix"
       >
@@ -591,10 +591,10 @@ export function StackedChart({
                 ticks: {
                   autoSkip: true,
                   maxTicksLimit: 5,
-                  color: isDark ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.7)',
+                  color: getAxisColors(isDark).tick,
                 },
                 grid: {
-                  color: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
+                  color: getAxisColors(isDark).grid,
                 },
               },
               y: {
@@ -604,10 +604,10 @@ export function StackedChart({
                 },
                 beginAtZero: true,
                 grid: {
-                  color: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
+                  color: getAxisColors(isDark).grid,
                 },
                 ticks: {
-                  color: isDark ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.7)',
+                  color: getAxisColors(isDark).tick,
                   callback: function (value) {
                     if (yFormat.factor === 1) return value.toLocaleString();
                     const v = value / yFormat.factor;
@@ -668,18 +668,10 @@ export function StackedChart({
     if (chartRef.current) {
       const chart = chartRef.current;
       const isDark = theme.palette.mode === 'dark';
-      chart.options.scales.x.ticks.color = isDark
-        ? 'rgba(255, 255, 255, 0.8)'
-        : 'rgba(0, 0, 0, 0.7)';
-      chart.options.scales.x.grid.color = isDark
-        ? 'rgba(255, 255, 255, 0.1)'
-        : 'rgba(0, 0, 0, 0.1)';
-      chart.options.scales.y.grid.color = isDark
-        ? 'rgba(255, 255, 255, 0.1)'
-        : 'rgba(0, 0, 0, 0.1)';
-      chart.options.scales.y.ticks.color = isDark
-        ? 'rgba(255, 255, 255, 0.8)'
-        : 'rgba(0, 0, 0, 0.7)';
+      chart.options.scales.x.ticks.color = getAxisColors(isDark).tick;
+      chart.options.scales.x.grid.color = getAxisColors(isDark).grid;
+      chart.options.scales.y.grid.color = getAxisColors(isDark).grid;
+      chart.options.scales.y.ticks.color = getAxisColors(isDark).tick;
       // Update tooltip config with current theme and timestamps
       const originalTimestamps = chartData ? chartData.labels : [];
       chart.options.plugins.tooltip = getTooltipConfig(isDark, originalTimestamps, trendWindow);
@@ -699,7 +691,7 @@ export function StackedChart({
       display="flex"
       flexDirection="column"
       alignItems="flex-start"
-      justifyContent="center"
+      justifyContent="left"
       sx={{ width: '100%' }}
       className="w-block"
     >
@@ -712,7 +704,10 @@ export function StackedChart({
         >
           {title}
         </Typography>
-        <Typography variant="body2" sx={{ color: '#aaa', fontSize: '0.95rem', ml: 2 }}>
+        <Typography
+          variant="body2"
+          sx={{ color: getAxisColors(isDark).tick, fontSize: '0.95rem', ml: 2 }}
+        >
           {timeLabels[trendWindow] || 'last month'}
         </Typography>
       </Box>
@@ -720,11 +715,10 @@ export function StackedChart({
         <Typography
           variant="body2"
           sx={{
-            color: '#aaa',
+            color: getAxisColors(isDark).tick,
             fontSize: '0.95rem',
             mb: 1,
             textAlign: 'left',
-            opacity: 0.8,
             lineHeight: 1.4,
           }}
         >
@@ -735,7 +729,7 @@ export function StackedChart({
         display="flex"
         flexDirection={{ xs: 'column', sm: 'row' }}
         alignItems="center"
-        justifyContent="center"
+        justifyContent="flex-start"
         sx={{ width: '100%', maxWidth: 800, mb: 1, mx: 'auto' }}
         className="w-clearfix"
       >
