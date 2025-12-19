@@ -492,12 +492,7 @@ export default function Dashboard() {
           }}
         >
           {/* Dashboard Title and Intro */}
-          <Grid
-            container
-            spacing={4}
-            sx={{ flexWrap: 'nowrap', alignItems: 'stretch' }}
-            direction="row"
-          >
+          <Grid container spacing={4} sx={{ alignItems: 'stretch' }} direction="row">
             <Grid
               size={{ xs: 12, md: 6 }}
               sx={{ display: 'flex', flexDirection: 'column', maxWidth: 650 }}
