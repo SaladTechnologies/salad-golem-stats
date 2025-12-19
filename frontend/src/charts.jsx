@@ -23,7 +23,8 @@ const plotHeight = 300;
 export function TrendChart({ id, title, trendWindow, trendData, unit, unitType, isLoading }) {
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
-  const chartRef = React.useRef(null); // To hold the chart instance
+  const chartRef = React.useRef(null);
+  const prevTrendData = React.useRef(null);
 
   // Use lighter green for current values in dark mode
   const valueColor = isDark ? 'rgb(178,213,48)' : 'rgb(31, 79, 34)';
@@ -42,25 +43,23 @@ export function TrendChart({ id, title, trendWindow, trendData, unit, unitType, 
     const date = new Date(ts);
     if (window === 'day') {
       // DD HH:MM (locale-aware)
-      return date.toLocaleString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false });
+      return date.toLocaleString(undefined, { day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
     } else {
-      // DD MMM (locale-aware)
-      return date.toLocaleString(undefined, { day: '2-digit', month: 'short' });
+      // DD MMM YYYY (locale-aware)
+      return date.toLocaleString(undefined, { day: '2-digit', month: 'short', year: 'numeric' });
     }
   }
 
   React.useEffect(() => {
     const canvas = document.getElementById(id);
-    if (!canvas || !trendData || trendData.length === 0) {
-      return;
-    }
+    if (!canvas) return;
 
-    const yMax = Math.max(...trendData.map((d) => Math.abs(d.y)));
+    const yMax = trendData.length > 0 ? Math.max(...trendData.map((d) => Math.abs(d.y))) : 0;
     const yFormat = getYAxisFormat(yMax);
     const allLabels = trendData.map((d) => formatXAxis(d.x, trendWindow));
 
     if (!chartRef.current) {
-      // Create chart instance on initial render
+      // Create chart instance
       chartRef.current = new Chart(canvas, {
         type: 'line',
         data: {
@@ -80,20 +79,28 @@ export function TrendChart({ id, title, trendWindow, trendData, unit, unitType, 
         options: {
           responsive: true,
           maintainAspectRatio: false,
-          animation: false, // Disable animations
+          animation: {
+            duration: 0, // No animation to prevent weird transitions
+          },
           plugins: { legend: { display: false }, title: { display: false } },
           scales: {
             x: {
+              title: { display: false },
               ticks: {
                 autoSkip: true,
-                maxTicksLimit: 7,
+                maxTicksLimit: 5,
                 color: isDark ? 'rgba(255, 255, 255, 0.6)' : 'rgba(0, 0, 0, 0.7)',
               },
-              grid: { color: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)' },
+              grid: {
+                color: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
+              },
             },
             y: {
+              title: { display: false },
               beginAtZero: true,
-              grid: { color: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)' },
+              grid: {
+                color: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
+              },
               ticks: {
                 color: isDark ? 'rgba(255, 255, 255, 0.6)' : 'rgba(0, 0, 0, 0.7)',
                 callback: function (value) {
@@ -110,11 +117,10 @@ export function TrendChart({ id, title, trendWindow, trendData, unit, unitType, 
         },
       });
     } else {
-      // Update chart instance with new data
+      // Update chart instance
       const chart = chartRef.current;
       chart.data.labels = allLabels;
       chart.data.datasets[0].data = trendData.map((d) => d.y);
-      // Also update the y-axis formatting based on the new data
       chart.options.scales.y.ticks.callback = function (value) {
         if (yFormat.factor === 1) return value.toLocaleString();
         const v = value / yFormat.factor;
@@ -123,17 +129,18 @@ export function TrendChart({ id, title, trendWindow, trendData, unit, unitType, 
         if (Math.abs(v) < 100) return v.toFixed(1).replace(/\.?0+$/, '') + yFormat.suffix;
         return Math.round(v) + yFormat.suffix;
       };
-      chart.update('none'); // Use 'none' to prevent animations on update
+      chart.update('none'); // 'none' prevents animation
     }
+    
+    prevTrendData.current = trendData;
 
-    // Cleanup function to destroy chart on component unmount
     return () => {
       if (chartRef.current) {
         chartRef.current.destroy();
         chartRef.current = null;
       }
     };
-  }, [trendData, isDark]); // Only re-run the effect when trendData or theme changes
+  }, [id, trendData, trendWindow, title, isDark]);
 
   // Value display logic
   const lastValue = trendData.length > 0 ? trendData[trendData.length - 1].y : null;
