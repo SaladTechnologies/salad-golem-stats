@@ -263,10 +263,10 @@ export default function Dashboard() {
       });
   }, []);
 
-  // Simple transformation since backend already does the sorting and grouping
-  const gpuModelStackedData = React.useMemo(() => {
+  // Helper function to transform backend data for stacked charts
+  const createStackedChartData = React.useCallback((statsSummary, fieldName) => {
     const legendColors = ['#b2d530', '#9acc35', '#7bb82e', '#53a626', '#3d6b28', '#1f4f22'];
-    const raw = statsSummary?.gpu_unique_node_count;
+    const raw = statsSummary?.[fieldName];
     if (!raw || !raw.labels || !raw.datasets) {
       return { labels: [], datasets: [] };
     }
@@ -279,7 +279,7 @@ export default function Dashboard() {
       fill: true,
     }));
     return { labels: raw.labels, datasets };
-  }, [statsSummary]);
+  }, []);
 
   return (
     <ThemeProvider theme={theme}>
@@ -676,52 +676,81 @@ export default function Dashboard() {
                     />
                   </Grid>
                   <Grid size={{ xs: 12, sm: 6 }}>
-                    <StackedChart
-                      id="gpuStackedChart"
-                      title="GPUs Used by Model"
-                      description="Provider nodes running GPU workloads, by model."
-                      trendWindow={globalTimeWindow}
-                      setTrendWindow={() => {}}
-                      chartData={gpuModelStackedData}
-                      labels={gpuModelStackedData.groupLabels}
-                      unit="nodes"
-                    />
+                    {(() => {
+                      const gpuData = createStackedChartData(statsSummary, 'gpu_unique_node_count');
+                      return (
+                        <StackedChart
+                          id="gpuStackedChart"
+                          title="GPUs Used by Model"
+                          description="Provider nodes running GPU workloads, by model."
+                          trendWindow={globalTimeWindow}
+                          setTrendWindow={() => {}}
+                          chartData={gpuData}
+                          labels={gpuData.labels}
+                          unit="nodes"
+                        />
+                      );
+                    })()}
                   </Grid>
                   <Grid size={{ xs: 12, sm: 6 }}>
-                    <StackedChart
-                      id="gpuStackedChartVram"
-                      title="GPUs Used by VRAM"
-                      description="Provider nodes running GPU workloads, by VRAM."
-                      trendWindow={globalTimeWindow}
-                      setTrendWindow={() => {}}
-                      chartData={gpuModelStackedData}
-                      labels={gpuModelStackedData.groupLabels}
-                      unit="nodes"
-                    />
+                    {(() => {
+                      const gpuVramData = createStackedChartData(
+                        statsSummary,
+                        'vram_unique_node_count',
+                      );
+                      return (
+                        <StackedChart
+                          id="gpuStackedChartVram"
+                          title="GPUs Used by VRAM"
+                          description="Provider nodes running GPU workloads, by VRAM."
+                          trendWindow={globalTimeWindow}
+                          setTrendWindow={() => {}}
+                          chartData={gpuVramData}
+                          labels={gpuVramData.labels}
+                          unit="nodes"
+                        />
+                      );
+                    })()}
                   </Grid>
                   <Grid size={{ xs: 12, sm: 6 }}>
-                    <StackedChart
-                      id="gpuStackedChartTime"
-                      title="GPUs Time by Model (s)"
-                      description="Time GPU customer workloads were running on SaladCloud, by GPU."
-                      trendWindow={globalTimeWindow}
-                      setTrendWindow={() => {}}
-                      chartData={gpuModelStackedData}
-                      labels={gpuModelStackedData.groupLabels}
-                      unit="nodes"
-                    />
+                    {(() => {
+                      const gpuTimeData = createStackedChartData(
+                        statsSummary,
+                        'gpu_total_time_seconds',
+                      );
+                      return (
+                        <StackedChart
+                          id="gpuStackedChartTime"
+                          title="GPUs Time by Model (s)"
+                          description="Time GPU customer workloads were running on SaladCloud, by GPU."
+                          trendWindow={globalTimeWindow}
+                          setTrendWindow={() => {}}
+                          chartData={gpuTimeData}
+                          labels={gpuTimeData.labels}
+                          unit="nodes"
+                        />
+                      );
+                    })()}
                   </Grid>
                   <Grid size={{ xs: 12, sm: 6 }}>
-                    <StackedChart
-                      id="gpuStackedChartVramTime"
-                      title="GPUs Time by VRAM (s)"
-                      description="Time GPU customer workloads were running on SaladCloud, by VRAM."
-                      trendWindow={globalTimeWindow}
-                      setTrendWindow={() => {}}
-                      chartData={gpuModelStackedData}
-                      labels={gpuModelStackedData.groupLabels}
-                      unit="nodes"
-                    />
+                    {(() => {
+                      const gpuVramTimeData = createStackedChartData(
+                        statsSummary,
+                        'vram_total_time_seconds',
+                      );
+                      return (
+                        <StackedChart
+                          id="gpuStackedChartVramTime"
+                          title="GPUs Time by VRAM (s)"
+                          description="Time GPU customer workloads were running on SaladCloud, by VRAM."
+                          trendWindow={globalTimeWindow}
+                          setTrendWindow={() => {}}
+                          chartData={gpuVramTimeData}
+                          labels={gpuVramTimeData.labels}
+                          unit="nodes"
+                        />
+                      );
+                    })()}
                   </Grid>
                 </>
               ) : (
