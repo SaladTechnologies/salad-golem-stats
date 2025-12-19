@@ -2,6 +2,7 @@
 // Uses Material-UI, Chart.js, and custom data generators
 
 import React from 'react';
+import 'chartjs-adapter-date-fns';
 import { Box, Typography, useTheme } from '@mui/material';
 import { Chart } from 'chart.js/auto';
 
@@ -13,30 +14,30 @@ const formatTooltipDate = (timestamp, window) => {
   const date = new Date(timestamp);
   if (window === 'day') {
     // More detailed: "Dec 19, 2024 at 14:30"
-    return date.toLocaleString(undefined, { 
-      month: 'short', 
-      day: 'numeric', 
+    return date.toLocaleString(undefined, {
+      month: 'short',
+      day: 'numeric',
       year: 'numeric',
-      hour: '2-digit', 
+      hour: '2-digit',
       minute: '2-digit',
-      hour12: false 
+      hour12: false,
     });
   } else if (window === 'week') {
     // More detailed: "Dec 19, 2024 at 14:30"
-    return date.toLocaleString(undefined, { 
-      month: 'short', 
-      day: 'numeric', 
+    return date.toLocaleString(undefined, {
+      month: 'short',
+      day: 'numeric',
       year: 'numeric',
-      hour: '2-digit', 
+      hour: '2-digit',
       minute: '2-digit',
-      hour12: false 
+      hour12: false,
     });
   } else {
     // Month view: "Dec 19, 2024" (no time)
-    return date.toLocaleString(undefined, { 
-      month: 'short', 
-      day: 'numeric', 
-      year: 'numeric'
+    return date.toLocaleString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
     });
   }
 };
@@ -49,13 +50,13 @@ const getTooltipConfig = (isDark, originalTimestamps, window) => ({
   usePointStyle: true,
   pointStyle: 'circle',
   callbacks: {
-    title: function(context) {
+    title: function (context) {
       // Use original timestamp for custom formatting
       const index = context[0].dataIndex;
       const timestamp = originalTimestamps[index];
       return formatTooltipDate(timestamp, window);
-    }
-  }
+    },
+  },
 });
 
 /**
@@ -93,7 +94,12 @@ export function TrendChart({ id, title, trendWindow, trendData, unit, unitType, 
     const date = new Date(ts);
     if (window === 'day') {
       // DD HH:MM (locale-aware)
-      return date.toLocaleString(undefined, { day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
+      return date.toLocaleString(undefined, {
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      });
     } else {
       // DD MMM YYYY (locale-aware)
       return date.toLocaleString(undefined, { day: '2-digit', month: 'short', year: 'numeric' });
@@ -106,32 +112,29 @@ export function TrendChart({ id, title, trendWindow, trendData, unit, unitType, 
 
     const yMax = trendData.length > 0 ? Math.max(...trendData.map((d) => Math.abs(d.y))) : 0;
     const yFormat = getYAxisFormat(yMax);
-    const allLabels = trendData.map((d) => formatXAxis(d.x, trendWindow));
     const originalTimestamps = trendData.map((d) => d.x);
 
+    const dataset = {
+      label: title,
+      data: trendData.map((d) => ({ x: d.x, y: d.y })),
+      backgroundColor: 'rgba(83,166,38,0.15)',
+      borderColor: 'rgb(83,166,38)',
+      borderWidth: 2,
+      fill: true,
+      pointRadius: 0,
+    };
+
     if (!chartRef.current) {
-      // Create chart instance
       chartRef.current = new Chart(canvas, {
         type: 'line',
         data: {
-          labels: allLabels,
-          datasets: [
-            {
-              label: title,
-              data: trendData.map((d) => d.y),
-              backgroundColor: 'rgba(83,166,38,0.15)',
-              borderColor: 'rgb(83,166,38)',
-              borderWidth: 2,
-              fill: true,
-              pointRadius: 0,
-            },
-          ],
+          datasets: [dataset],
         },
         options: {
           responsive: true,
           maintainAspectRatio: false,
           animation: {
-            duration: 0, // No animation to prevent weird transitions
+            duration: 0,
           },
           plugins: {
             legend: { display: false },
@@ -144,6 +147,17 @@ export function TrendChart({ id, title, trendWindow, trendData, unit, unitType, 
           },
           scales: {
             x: {
+              type: 'time',
+              offset: true,
+              bounds: 'data',
+              time: {
+                unit: trendWindow === 'day' ? 'hour' : 'day',
+                tooltipFormat: 'yyyy-MM-dd HH:mm',
+                displayFormats: {
+                  hour: 'MMM d, HH:mm',
+                  day: 'MMM d',
+                },
+              },
               title: { display: false },
               ticks: {
                 autoSkip: true,
@@ -178,8 +192,18 @@ export function TrendChart({ id, title, trendWindow, trendData, unit, unitType, 
     } else {
       // Update chart instance
       const chart = chartRef.current;
-      chart.data.labels = allLabels;
-      chart.data.datasets[0].data = trendData.map((d) => d.y);
+      chart.data.datasets = [dataset];
+      chart.options.scales.x.type = 'time';
+      chart.options.scales.x.offset = true;
+      chart.options.scales.x.bounds = 'data';
+      chart.options.scales.x.time = {
+        unit: trendWindow === 'day' ? 'hour' : 'day',
+        tooltipFormat: 'yyyy-MM-dd HH:mm',
+        displayFormats: {
+          hour: 'MMM d, HH:mm',
+          day: 'MMM d',
+        },
+      };
       chart.options.scales.y.ticks.callback = function (value) {
         if (yFormat.factor === 1) return value.toLocaleString();
         const v = value / yFormat.factor;
@@ -188,9 +212,9 @@ export function TrendChart({ id, title, trendWindow, trendData, unit, unitType, 
         if (Math.abs(v) < 100) return v.toFixed(1).replace(/\.?0+$/, '') + yFormat.suffix;
         return Math.round(v) + yFormat.suffix;
       };
-      chart.update('none'); // 'none' prevents animation
+      chart.update('none');
     }
-    
+
     prevTrendData.current = trendData;
 
     return () => {
@@ -206,10 +230,18 @@ export function TrendChart({ id, title, trendWindow, trendData, unit, unitType, 
     if (chartRef.current) {
       const chart = chartRef.current;
       const isDark = theme.palette.mode === 'dark';
-      chart.options.scales.x.ticks.color = isDark ? 'rgba(255, 255, 255, 0.6)' : 'rgba(0, 0, 0, 0.7)';
-      chart.options.scales.x.grid.color = isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)';
-      chart.options.scales.y.grid.color = isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)';
-      chart.options.scales.y.ticks.color = isDark ? 'rgba(255, 255, 255, 0.6)' : 'rgba(0, 0, 0, 0.7)';
+      chart.options.scales.x.ticks.color = isDark
+        ? 'rgba(255, 255, 255, 0.6)'
+        : 'rgba(0, 0, 0, 0.7)';
+      chart.options.scales.x.grid.color = isDark
+        ? 'rgba(255, 255, 255, 0.1)'
+        : 'rgba(0, 0, 0, 0.1)';
+      chart.options.scales.y.grid.color = isDark
+        ? 'rgba(255, 255, 255, 0.1)'
+        : 'rgba(0, 0, 0, 0.1)';
+      chart.options.scales.y.ticks.color = isDark
+        ? 'rgba(255, 255, 255, 0.6)'
+        : 'rgba(0, 0, 0, 0.7)';
       // Update tooltip config with current theme and timestamps
       const originalTimestamps = trendData.map((d) => d.x);
       chart.options.plugins.tooltip = getTooltipConfig(isDark, originalTimestamps, trendWindow);
@@ -281,10 +313,7 @@ export function TrendChart({ id, title, trendWindow, trendData, unit, unitType, 
           >
             {formattedUnit}
           </Typography>
-          <Typography
-            variant="h4"
-            sx={{ fontWeight: 700, color: valueColor, fontSize: '2.5rem' }}
-          >
+          <Typography variant="h4" sx={{ fontWeight: 700, color: valueColor, fontSize: '2.5rem' }}>
             {formattedValue}
           </Typography>
         </Box>
@@ -420,7 +449,12 @@ export function StackedChart({ id, title, trendWindow, setTrendWindow, labels, c
     const date = new Date(ts);
     if (window === 'day') {
       // DD HH:MM (locale-aware)
-      return date.toLocaleString(undefined, { day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
+      return date.toLocaleString(undefined, {
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      });
     } else {
       // DD MMM YYYY (locale-aware)
       return date.toLocaleString(undefined, { day: '2-digit', month: 'short', year: 'numeric' });
@@ -446,21 +480,21 @@ export function StackedChart({ id, title, trendWindow, setTrendWindow, labels, c
     return paren ? result + ' ' + paren : result;
   }
 
-  // Use provided chartData only
+  // Use provided chartData, but convert to time scale format
   React.useEffect(() => {
-    if (chartData) {
-      // Format the labels for consistent display
-      const formattedChartData = {
-        ...chartData,
-        labels: chartData.labels.map(label => formatXAxis(label, trendWindow))
-      };
-      setInternalChartData(formattedChartData);
+    if (chartData && chartData.labels && chartData.datasets) {
+      // Convert each dataset's data to [{x, y}] objects for time scale
+      const datasets = chartData.datasets.map((ds) => ({
+        ...ds,
+        data: chartData.labels.map((label, i) => ({ x: label, y: ds.data[i] })),
+      }));
+      setInternalChartData({ datasets });
       setCurrents(chartData.datasets.map((ds) => ds.data[ds.data.length - 1]));
     } else {
       setInternalChartData(null);
       setCurrents([]);
     }
-  }, [chartData, trendWindow]);
+  }, [chartData]);
 
   // Determine y-axis scale and label formatting for StackedChart
   function getYAxisFormat(maxVal) {
@@ -481,13 +515,17 @@ export function StackedChart({ id, title, trendWindow, setTrendWindow, labels, c
     if (!ctx) return;
 
     const yMax = internalChartData
-      ? Math.max(...internalChartData.datasets.flatMap((ds) => ds.data).map((d) => Math.abs(d)))
+      ? Math.max(...internalChartData.datasets.flatMap((ds) => ds.data.map((d) => Math.abs(d.y))))
       : 0;
     const yFormat = getYAxisFormat(yMax);
 
     if (!chartRef.current) {
-      if (internalChartData && internalChartData.labels && internalChartData.labels.length > 0) {
-        const originalTimestamps = chartData.labels; // Use original timestamps from chartData
+      if (
+        internalChartData &&
+        internalChartData.datasets &&
+        internalChartData.datasets.length > 0
+      ) {
+        const originalTimestamps = chartData.labels;
         chartRef.current = new Chart(ctx, {
           type: 'line',
           data: internalChartData,
@@ -505,6 +543,17 @@ export function StackedChart({ id, title, trendWindow, setTrendWindow, labels, c
             elements: { point: { radius: 0, hoverRadius: 0, borderWidth: 0 } },
             scales: {
               x: {
+                type: 'time',
+                offset: true,
+                bounds: 'data',
+                time: {
+                  unit: trendWindow === 'day' ? 'hour' : 'day',
+                  tooltipFormat: 'yyyy-MM-dd HH:mm',
+                  displayFormats: {
+                    hour: 'MMM d, HH:mm',
+                    day: 'MMM d',
+                  },
+                },
                 title: { display: false },
                 ticks: {
                   autoSkip: true,
@@ -530,8 +579,10 @@ export function StackedChart({ id, title, trendWindow, setTrendWindow, labels, c
                     if (yFormat.factor === 1) return value.toLocaleString();
                     const v = value / yFormat.factor;
                     if (v % 1 === 0) return v + yFormat.suffix;
-                    if (Math.abs(v) < 10) return v.toFixed(2).replace(/\.?0+$/, '') + yFormat.suffix;
-                    if (Math.abs(v) < 100) return v.toFixed(1).replace(/\.?0+$/, '') + yFormat.suffix;
+                    if (Math.abs(v) < 10)
+                      return v.toFixed(2).replace(/\.?0+$/, '') + yFormat.suffix;
+                    if (Math.abs(v) < 100)
+                      return v.toFixed(1).replace(/\.?0+$/, '') + yFormat.suffix;
                     return Math.round(v) + yFormat.suffix;
                   },
                 },
@@ -548,6 +599,17 @@ export function StackedChart({ id, title, trendWindow, setTrendWindow, labels, c
       const chart = chartRef.current;
       if (internalChartData) {
         chart.data = internalChartData;
+        chart.options.scales.x.type = 'time';
+        chart.options.scales.x.offset = true;
+        chart.options.scales.x.bounds = 'data';
+        chart.options.scales.x.time = {
+          unit: trendWindow === 'day' ? 'hour' : 'day',
+          tooltipFormat: 'yyyy-MM-dd HH:mm',
+          displayFormats: {
+            hour: 'MMM d, HH:mm',
+            day: 'MMM d',
+          },
+        };
         chart.options.scales.y.ticks.callback = function (value) {
           if (yFormat.factor === 1) return value.toLocaleString();
           const v = value / yFormat.factor;
@@ -566,17 +628,25 @@ export function StackedChart({ id, title, trendWindow, setTrendWindow, labels, c
         chartRef.current = null;
       }
     };
-  }, [id, internalChartData, isDark]); // isDark is needed to re-evaluate options on theme change
+  }, [id, internalChartData, isDark, trendWindow]);
 
   // Update colors when theme changes without reloading chart
   React.useEffect(() => {
     if (chartRef.current) {
       const chart = chartRef.current;
       const isDark = theme.palette.mode === 'dark';
-      chart.options.scales.x.ticks.color = isDark ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.7)';
-      chart.options.scales.x.grid.color = isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)';
-      chart.options.scales.y.grid.color = isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)';
-      chart.options.scales.y.ticks.color = isDark ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.7)';
+      chart.options.scales.x.ticks.color = isDark
+        ? 'rgba(255, 255, 255, 0.8)'
+        : 'rgba(0, 0, 0, 0.7)';
+      chart.options.scales.x.grid.color = isDark
+        ? 'rgba(255, 255, 255, 0.1)'
+        : 'rgba(0, 0, 0, 0.1)';
+      chart.options.scales.y.grid.color = isDark
+        ? 'rgba(255, 255, 255, 0.1)'
+        : 'rgba(0, 0, 0, 0.1)';
+      chart.options.scales.y.ticks.color = isDark
+        ? 'rgba(255, 255, 255, 0.8)'
+        : 'rgba(0, 0, 0, 0.7)';
       // Update tooltip config with current theme and timestamps
       const originalTimestamps = chartData ? chartData.labels : [];
       chart.options.plugins.tooltip = getTooltipConfig(isDark, originalTimestamps, trendWindow);
@@ -638,7 +708,10 @@ export function StackedChart({ id, title, trendWindow, setTrendWindow, labels, c
         {/* Legend/value display: right or below chart depending on width */}
         {!isNarrow && (
           <Box sx={{ ml: 1.5, mt: 0, minWidth: 0, flex: 1 }} className="w-inline-block">
-            <Typography variant="caption" sx={{ color: '#aaa', fontSize: '0.8rem', mb: 1, display: 'block' }}>
+            <Typography
+              variant="caption"
+              sx={{ color: '#aaa', fontSize: '0.8rem', mb: 1, display: 'block' }}
+            >
               {trendWindow === 'day' ? 'last hour:' : 'last day:'}
             </Typography>
             {currents.length > 0 && internalChartData && internalChartData.datasets
@@ -672,7 +745,8 @@ export function StackedChart({ id, title, trendWindow, setTrendWindow, labels, c
                         fontWeight: 400,
                       }}
                     >
-                      <span style={{ fontWeight: 700 }}>{val}</span> {legendLabel(internalChartData.datasets[idx]?.label)}
+                      <span style={{ fontWeight: 700 }}>{val}</span>{' '}
+                      {legendLabel(internalChartData.datasets[idx]?.label)}
                     </Typography>
                   </Box>
                 ))
@@ -725,7 +799,8 @@ export function StackedChart({ id, title, trendWindow, setTrendWindow, labels, c
                           fontWeight: 400,
                         }}
                       >
-                        <span style={{ fontWeight: 700 }}>{val}</span> {legendLabel(internalChartData.datasets[idx]?.label)}
+                        <span style={{ fontWeight: 700 }}>{val}</span>{' '}
+                        {legendLabel(internalChartData.datasets[idx]?.label)}
                       </Typography>
                     </Box>
                   ))

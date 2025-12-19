@@ -115,11 +115,13 @@ def get_metrics_by_gpu(metric: str, period: str = "month", group_by: str = "gpu"
             cur.execute(query, params)
             rows = cur.fetchall()
 
+            # Extract unique sorted timestamps for labels
+            labels = sorted({r[1] if len(r) > 2 else r[0] for r in rows})
+
             if group_by == "vram":
                 # Build a mapping from gpu_group to VRAM (as string, e.g., '24 GB')
                 gpu_to_vram = {}
                 for gpu_id, name in gpu_class_names.items():
-                    # Try to extract VRAM from the name, e.g., 'RTX 4090 (24 GB)' -> '24 GB'
                     import re
 
                     match = re.search(r"\((\d+\s*[gG][bB])\)", name)
@@ -129,7 +131,7 @@ def get_metrics_by_gpu(metric: str, period: str = "month", group_by: str = "gpu"
                         vram = "Unknown"
                     gpu_to_vram[gpu_id] = vram
 
-                # Aggregate by VRAM
+                # Aggregate by VRAM, aligned to labels
                 vram_group_sums = {}
                 vram_entries = {}
                 for r in rows:
@@ -140,82 +142,66 @@ def get_metrics_by_gpu(metric: str, period: str = "month", group_by: str = "gpu"
                     vram_group_sums[vram] = vram_group_sums.get(vram, 0) + (value or 0)
                     if vram not in vram_entries:
                         vram_entries[vram] = {}
-                    if ts not in vram_entries[vram]:
-                        vram_entries[vram][ts] = 0
-                    vram_entries[vram][ts] += value or 0
+                    vram_entries[vram][ts] = vram_entries[vram].get(ts, 0) + (value or 0)
 
                 # Find top 5 VRAM groups
-                top_vram_groups = sorted(
-                    vram_group_sums.items(), key=lambda x: x[1], reverse=True
-                )[:5]
+                top_vram_groups = sorted(vram_group_sums.items(), key=lambda x: x[1], reverse=True)[
+                    :5
+                ]
                 top_vram_names = set(v for v, _ in top_vram_groups)
                 output = []
+                # Prepare data arrays aligned to labels
                 for vram in top_vram_names:
-                    values = [
-                        {"ts": ts, "value": v}
-                        for ts, v in sorted(vram_entries[vram].items())
-                    ]
-                    output.append({"group": vram, "values": values})
-                # Aggregate all other VRAMs into 'other'
-                other_vram_entries = {}
+                    data = [vram_entries[vram].get(ts, 0) for ts in labels]
+                    output.append({"label": vram, "data": data})
+                # Aggregate all other VRAMs into 'Other', aligned to labels
+                other_data = [0 for _ in labels]
+                label_index = {ts: i for i, ts in enumerate(labels)}
                 for vram in vram_entries:
                     if vram not in top_vram_names:
                         for ts, v in vram_entries[vram].items():
-                            if ts not in other_vram_entries:
-                                other_vram_entries[ts] = 0
-                            other_vram_entries[ts] += v
-                if other_vram_entries:
-                    values = [
-                        {"ts": ts, "value": v}
-                        for ts, v in sorted(other_vram_entries.items())
-                    ]
-                    output.append({"group": "other", "values": values})
-                return {metric: output}
+                            idx = label_index[ts]
+                            other_data[idx] += v
+                if any(other_data):
+                    output.append({"label": "Other", "data": other_data})
 
-            # Default: group by GPU (original behavior)
-            group_sums = {}
-            for r in rows:
-                gpu_group = r[0]
-                value = r[2] if len(r) > 2 else r[1]
-                group_sums[gpu_group] = group_sums.get(gpu_group, 0) + (value or 0)
-            # Find the top 5 gpu_groups by sum
-            top_groups = sorted(group_sums.items(), key=lambda x: x[1], reverse=True)[
-                :5
-            ]
-            top_group_names = set(g for g, _ in top_groups)
-            output = []
-            group_entries = {g: [] for g in top_group_names}
-            other_entries = []
-            for r in rows:
-                gpu_group = r[0]
-                ts = r[1] if len(r) > 2 else r[0]
-                value = r[2] if len(r) > 2 else r[1]
-                entry = {"ts": ts, "value": value}
-                if gpu_group in top_group_names:
-                    group_entries[gpu_group].append(entry)
-                else:
-                    # Sum values for the same timestamp in 'other'
-                    found = False
-                    for other_entry in other_entries:
-                        if other_entry["ts"] == entry["ts"]:
-                            other_entry["value"] += value or 0
-                            found = True
-                            break
-                    if not found:
-                        other_entries.append({"ts": entry["ts"], "value": value or 0})
-            # Only send the readable name as the group
-            for gpu_group in top_group_names:
-                label = gpu_class_names.get(gpu_group, None)
-                if label is None:
-                    print(
-                        f"[WARNING] gpu_group '{gpu_group}' not found in gpu_class_names, using fallback."
-                    )
-                    label = gpu_group
-                output.append({"group": label, "values": group_entries[gpu_group]})
-            if other_entries:
-                output.append({"group": "other", "values": other_entries})
+            else:
+                # group by GPU
+                group_sums = {}
+                for r in rows:
+                    gpu_group = r[0]
+                    value = r[2] if len(r) > 2 else r[1]
+                    group_sums[gpu_group] = group_sums.get(gpu_group, 0) + (value or 0)
+                # Find the top 5 gpu_groups by sum
+                top_groups = sorted(group_sums.items(), key=lambda x: x[1], reverse=True)[:5]
+                top_group_names = set(g for g, _ in top_groups)
+                output = []
+                # Prepare group_entries and other_entries as arrays aligned to labels
+                group_entries = {g: [0 for _ in labels] for g in top_group_names}
+                other_entries = [0 for _ in labels]
+                label_index = {ts: i for i, ts in enumerate(labels)}
+                for r in rows:
+                    gpu_group = r[0]
+                    ts = r[1] if len(r) > 2 else r[0]
+                    value = r[2] if len(r) > 2 else r[1]
+                    idx = label_index[ts]
+                    if gpu_group in top_group_names:
+                        group_entries[gpu_group][idx] += value or 0
+                    else:
+                        other_entries[idx] += value or 0
+                # Only send the readable name as the group
+                for gpu_group in top_group_names:
+                    label = gpu_class_names.get(gpu_group, None)
+                    if label is None:
+                        print(
+                            f"[WARNING] gpu_group '{gpu_group}' not found in gpu_class_names, using fallback."
+                        )
+                        label = gpu_group
+                    output.append({"label": label, "data": group_entries[gpu_group]})
+                if any(other_entries):
+                    output.append({"label": "Other", "data": other_entries})
 
-            return {metric: output}
+            return {metric: {"labels": labels, "datasets": output}}
 
 
 def get_metrics(metric: str, period: str = "day", gpu: str = "all"):
@@ -248,7 +234,7 @@ def get_metrics(metric: str, period: str = "day", gpu: str = "all"):
         with conn.cursor() as cur:
             cur.execute(query, params)
             rows = cur.fetchall()
-            return {metric: [{"ts": r[0], "value": r[1]} for r in rows]}
+            return {metric: [{"x": r[0], "y": r[1]} for r in rows]}
 
 
 # Generalized endpoint for hourly/daily GPU stats (for 'all' group)
@@ -275,8 +261,6 @@ def assemble_metrics(
         "total_cpu_hours",
         "total_transaction_count",
         "unique_node_count",
-        "unique_node_ram",
-        "unique_node_cpu",
     ]
 
     gpu_metrics = [
@@ -285,25 +269,22 @@ def assemble_metrics(
     ]
     vram_metrics = [
         "unique_node_count",
+        "total_time_seconds",
     ]
 
     allowed_periods = ["day", "week", "month"]
 
     if period not in allowed_periods:
-        raise HTTPException(
-            status_code=400, detail=f"Invalid period. Allowed: {allowed_periods}"
-        )
+        raise HTTPException(status_code=400, detail=f"Invalid period. Allowed: {allowed_periods}")
 
     assembled_metrics = {}
     for metric in metrics:
-        assembled_metrics[metric] = get_metrics(metric=metric, period=period, gpu=gpu)[
-            metric
-        ]
+        assembled_metrics[metric] = get_metrics(metric=metric, period=period, gpu=gpu)[metric]
 
     for metric in gpu_metrics:
-        assembled_metrics["gpu_" + metric] = get_metrics_by_gpu(
-            metric=metric, period=period
-        )[metric]
+        assembled_metrics["gpu_" + metric] = get_metrics_by_gpu(metric=metric, period=period)[
+            metric
+        ]
 
     for metric in vram_metrics:
         assembled_metrics["vram_" + metric] = get_metrics_by_gpu(
@@ -325,17 +306,13 @@ def get_city_counts():
             """
             )
             rows = cur.fetchall()
-            return [
-                {"city": r[0], "count": r[1], "lat": r[2], "lon": r[3]} for r in rows
-            ]
+            return [{"city": r[0], "count": r[1], "lat": r[2], "lon": r[3]} for r in rows]
 
 
 @app.get("/metrics/transactions")
 def get_transactions(
     limit: int = Query(10, ge=1, le=100),
-    start: Optional[str] = Query(
-        None, description="Start datetime ISO8601 (default: 1 day ago)"
-    ),
+    start: Optional[str] = Query(None, description="Start datetime ISO8601 (default: 1 day ago)"),
     end: Optional[str] = Query(None, description="End datetime ISO8601 (default: now)"),
 ):
     """

@@ -43,6 +43,36 @@ function StyledPaper({ children, sx = {}, ...props }) {
     </Paper>
   );
 }
+
+// StyledHeading: reusable heading with border line
+function StyledHeading({ children, mt = 2, ...props }) {
+  return (
+    <>
+      <Typography
+        variant="h5"
+        sx={(theme) => ({
+          mt,
+          mb: 0.5,
+          color: theme.palette.primary.main,
+          fontSize: '1.25rem',
+        })}
+        className="w-block"
+        {...props}
+      >
+        {children}
+      </Typography>
+      <Box
+        sx={(theme) => ({
+          width: '90%',
+          borderBottom: `2px solid ${theme.palette.mode === 'dark' ? 'rgba(219,243,193,0.3)' : 'rgb(219,243,193)'}`,
+          mb: 2,
+        })}
+        className="w-clearfix"
+      />
+    </>
+  );
+}
+
 import { TrendChart, StackedChart } from './charts.jsx';
 import TransactionsTable from './TransactionsTable.jsx';
 import GlobeComponent from './Globe.jsx';
@@ -236,32 +266,20 @@ export default function Dashboard() {
 
   // Simple transformation since backend already does the sorting and grouping
   const gpuModelStackedData = React.useMemo(() => {
-    if (!statsSummary?.gpu_unique_node_count) {
+    const legendColors = ['#b2d530', '#9acc35', '#7bb82e', '#53a626', '#3d6b28', '#1f4f22'];
+    const raw = statsSummary?.gpu_unique_node_count;
+    if (!raw || !raw.labels || !raw.datasets) {
       return { labels: [], datasets: [] };
     }
-
-    const data = statsSummary.gpu_unique_node_count;
-    const legendColors = ['#b2d530', '#9acc35', '#7bb82e', '#53a626', '#3d6b28', '#1f4f22'];
-
-    // Get all unique timestamps
-    const allTimestamps = Array.from(
-      new Set(data.flatMap((groupObj) => groupObj.values.map((v) => v.ts))),
-    ).sort();
-
-    // Convert to Chart.js format - backend already sorted by usage
-    const datasets = data.map((groupObj, i) => ({
-      label: groupObj.group,
-      data: allTimestamps.map((ts) => {
-        const found = groupObj.values.find((v) => v.ts === ts);
-        return found ? found.value : 0;
-      }),
+    // Add backgroundColor and other Chart.js props
+    const datasets = raw.datasets.map((ds, i) => ({
+      ...ds,
       backgroundColor: legendColors[i % legendColors.length],
       borderColor: '#fff',
       borderWidth: 1,
       fill: true,
     }));
-
-    return { labels: allTimestamps, datasets };
+    return { labels: raw.labels, datasets };
   }, [statsSummary]);
 
   return (
@@ -561,51 +579,22 @@ export default function Dashboard() {
           <StyledPaper>
             {/* Transactions Table */}
             <Box sx={{ width: '100%' }}>
-              <Typography
-                variant="h5"
-                sx={{ mb: 0.5, color: theme.palette.primary.main, fontSize: '1.25rem' }}
-              >
-                Network Transactions
-              </Typography>
-              <Box
-                sx={{
-                  width: '90%',
-                  borderBottom: `2px solid ${theme.palette.mode === 'dark' ? 'rgba(219,243,193,0.3)' : 'rgb(219,243,193)'}`,
-                  mb: 1,
-                }}
-                className="w-clearfix"
-              />
+              <StyledHeading>Network Transactions</StyledHeading>
               <TransactionsTable data={transactions} />
             </Box>
           </StyledPaper>
           <StyledPaper>
-            <Typography
-              variant="h5"
-              sx={{ mt: 2, mb: 0.5, color: theme.palette.primary.main, fontSize: '1.25rem' }}
-              className="w-block"
-            >
-              Overall Usage
-            </Typography>
-            <Box
-              sx={{
-                width: '90%',
-                borderBottom: `2px solid ${theme.palette.mode === 'dark' ? 'rgba(219,243,193,0.3)' : 'rgb(219,243,193)'}`,
-                mb: 1,
-              }}
-              className="w-clearfix"
-            />
+            <StyledHeading>Network Activity</StyledHeading>
             <Grid container spacing={3} justifyContent="center">
               {statsSummary ? (
                 <>
                   <Grid size={{ xs: 12, sm: 6 }}>
                     <TrendChart
                       id="unique_node_count"
-                      title="Unique Node Count"
+                      title="Active Unique Nodes"
                       trendWindow={globalTimeWindow}
                       setTrendWindow={() => {}}
-                      trendData={
-                        statsSummary.unique_node_count?.map((d) => ({ x: d.ts, y: d.value })) || []
-                      }
+                      trendData={statsSummary.unique_node_count || []}
                       unit=""
                       unitType="front"
                       isLoading={isLoading}
@@ -614,13 +603,10 @@ export default function Dashboard() {
                   <Grid size={{ xs: 12, sm: 6 }}>
                     <TrendChart
                       id="trend-total-invoice-amount"
-                      title="Fees ($)"
+                      title="Fees Paid ($)"
                       trendWindow={globalTimeWindow}
                       setTrendWindow={() => {}}
-                      trendData={
-                        statsSummary.total_invoice_amount?.map((d) => ({ x: d.ts, y: d.value })) ||
-                        []
-                      }
+                      trendData={statsSummary.total_invoice_amount || []}
                       unit="$"
                       unitType="front"
                       isLoading={isLoading}
@@ -630,12 +616,10 @@ export default function Dashboard() {
                   <Grid size={{ xs: 12, sm: 6 }}>
                     <TrendChart
                       id="trend-total-time-seconds"
-                      title="Total Compute Time (sec)"
+                      title="Compute Time (sec)"
                       trendWindow={globalTimeWindow}
                       setTrendWindow={() => {}}
-                      trendData={
-                        statsSummary.total_time_seconds?.map((d) => ({ x: d.ts, y: d.value })) || []
-                      }
+                      trendData={statsSummary.total_time_seconds || []}
                       unit="sec"
                       unitType="below"
                       isLoading={isLoading}
@@ -644,15 +628,10 @@ export default function Dashboard() {
                   <Grid size={{ xs: 12, sm: 6 }}>
                     <TrendChart
                       id="trend-total-transaction-count"
-                      title="Total Transaction Count (tx)"
+                      title="Transaction Count (tx)"
                       trendWindow={globalTimeWindow}
                       setTrendWindow={() => {}}
-                      trendData={
-                        statsSummary.total_transaction_count?.map((d) => ({
-                          x: d.ts,
-                          y: d.value,
-                        })) || []
-                      }
+                      trendData={statsSummary.total_transaction_count || []}
                       unit="tx"
                       unitType="below"
                       isLoading={isLoading}
@@ -667,34 +646,18 @@ export default function Dashboard() {
             </Grid>
           </StyledPaper>
           <StyledPaper>
-            {/* Compute Resources Utilized Section */}
-            <Typography
-              variant="h5"
-              sx={{ mt: 4, mb: 0.5, color: theme.palette.primary.main, fontSize: '1.25rem' }}
-              className="w-block"
-            >
-              Resource Usage
-            </Typography>
-            <Box
-              sx={{
-                width: '90%',
-                borderBottom: `2px solid ${theme.palette.mode === 'dark' ? 'rgba(219,243,193,0.3)' : 'rgb(219,243,193)'}`,
-                mb: 1,
-              }}
-              className="w-clearfix"
-            />
+            {/* Compute Resources Usage Section */}
+            <StyledHeading>Resource Usage</StyledHeading>
             <Grid container spacing={3} justifyContent="center">
               {statsSummary ? (
                 <>
                   <Grid size={{ xs: 12, sm: 6 }}>
                     <TrendChart
                       id="trend-total-ram-hours"
-                      title="Total RAM Hours (GB-hr)"
+                      title="Memory (GB-hr)"
                       trendWindow={globalTimeWindow}
                       setTrendWindow={() => {}}
-                      trendData={
-                        statsSummary.total_ram_hours?.map((d) => ({ x: d.ts, y: d.value })) || []
-                      }
+                      trendData={statsSummary.total_ram_hours || []}
                       unit="GB-hr"
                       unitType="below"
                       isLoading={isLoading}
@@ -703,21 +666,52 @@ export default function Dashboard() {
                   <Grid size={{ xs: 12, sm: 6 }}>
                     <TrendChart
                       id="trend-total-cpu-hours"
-                      title="Total CPU Hours (CPU-hr)"
+                      title="vCPUs (vCPU-hr)"
                       trendWindow={globalTimeWindow}
                       setTrendWindow={() => {}}
-                      trendData={
-                        statsSummary.total_cpu_hours?.map((d) => ({ x: d.ts, y: d.value })) || []
-                      }
+                      trendData={statsSummary.total_cpu_hours || []}
                       unit="CPU-hr"
                       unitType="below"
                       isLoading={isLoading}
                     />
                   </Grid>
-                  <Grid size={{ xs: 12, md: 6 }}>
+                  <Grid size={{ xs: 12, sm: 6 }}>
                     <StackedChart
                       id="gpuStackedChart"
-                      title="Utilized GPUs by Model"
+                      title="GPUs Used by Model"
+                      trendWindow={globalTimeWindow}
+                      setTrendWindow={() => {}}
+                      chartData={gpuModelStackedData}
+                      labels={gpuModelStackedData.groupLabels}
+                      unit="nodes"
+                    />
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <StackedChart
+                      id="gpuStackedChartVram"
+                      title="GPUs Used by VRAM"
+                      trendWindow={globalTimeWindow}
+                      setTrendWindow={() => {}}
+                      chartData={gpuModelStackedData}
+                      labels={gpuModelStackedData.groupLabels}
+                      unit="nodes"
+                    />
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <StackedChart
+                      id="gpuStackedChartTime"
+                      title="GPUs Used by Model"
+                      trendWindow={globalTimeWindow}
+                      setTrendWindow={() => {}}
+                      chartData={gpuModelStackedData}
+                      labels={gpuModelStackedData.groupLabels}
+                      unit="nodes"
+                    />
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <StackedChart
+                      id="gpuStackedChartVramTime"
+                      title="GPUs Used by VRAM"
                       trendWindow={globalTimeWindow}
                       setTrendWindow={() => {}}
                       chartData={gpuModelStackedData}
