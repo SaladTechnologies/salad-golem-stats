@@ -134,11 +134,12 @@ export default function Dashboard() {
   function useStatsSummary(period = 'month', gpu = 'all') {
     const [stats, setStats] = useState(null);
     useEffect(() => {
+      // Don't clear existing data - keep old charts visible during loading
       fetch(`${import.meta.env.VITE_STATS_API_URL}/metrics/stats?period=${period}&gpu=${gpu}`)
         .then((res) => (res.ok ? res.json() : Promise.reject('Failed to fetch stats')))
         .then((data) => {
           setStats(data);
-          setIsLoadingTimeData(false);
+          setIsLoadingTimeData(false); // Only clear loading state when data arrives
         })
         .catch((err) => {
           console.error('Error loading stats summary:', err);
@@ -563,6 +564,7 @@ export default function Dashboard() {
                       }
                       unit="$"
                       unitType="front"
+                      isLoading={isLoadingTimeData}
                     />
                   </Grid>
                   <Grid size={{ xs: 12, sm: 6 }}>
@@ -579,6 +581,7 @@ export default function Dashboard() {
                       }
                       unit="tx"
                       unitType="below"
+                      isLoading={isLoadingTimeData}
                     />
                   </Grid>
                   <Grid size={{ xs: 12, sm: 6 }}>
@@ -592,6 +595,7 @@ export default function Dashboard() {
                       }
                       unit="sec"
                       unitType="below"
+                      isLoading={isLoadingTimeData}
                     />
                   </Grid>
                 </>
@@ -630,6 +634,7 @@ export default function Dashboard() {
                       }
                       unit=""
                       unitType="front"
+                      isLoading={isLoadingTimeData}
                     />
                   </Grid>
                   <Grid size={{ xs: 12, sm: 6 }}>
@@ -643,6 +648,7 @@ export default function Dashboard() {
                       }
                       unit="GB"
                       unitType="below"
+                      isLoading={isLoadingTimeData}
                     />
                   </Grid>
                   <Grid size={{ xs: 12, sm: 6 }}>
@@ -656,6 +662,7 @@ export default function Dashboard() {
                       }
                       unit="CPU cores"
                       unitType="below"
+                      isLoading={isLoadingTimeData}
                     />
                   </Grid>
                 </>
@@ -718,6 +725,7 @@ export default function Dashboard() {
                       }
                       unit="CPU-hr"
                       unitType="below"
+                      isLoading={isLoadingTimeData}
                     />
                   </Grid>
                   <Grid size={{ xs: 12, sm: 6 }}>
@@ -731,6 +739,7 @@ export default function Dashboard() {
                       }
                       unit="GB-hr"
                       unitType="below"
+                      isLoading={isLoadingTimeData}
                     />
                   </Grid>
                 </>

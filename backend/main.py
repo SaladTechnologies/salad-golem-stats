@@ -80,7 +80,6 @@ def get_table_parameters(metric: str, period: str):
         since = now - timedelta(weeks=1)
     elif period == "month":
         since = now - timedelta(days=31)
-
     return {"since": since, "table": table, "ts_col": ts_col}
 
 
@@ -245,7 +244,6 @@ def get_metrics(metric: str, period: str = "day", gpu: str = "all"):
         WHERE gpu_group = %s AND {ts_col} >= %s
         ORDER BY {ts_col} ASC
     """
-
     with get_db_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(query, params)

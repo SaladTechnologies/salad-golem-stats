@@ -20,12 +20,12 @@ const plotHeight = 300;
  *   unit: string (optional) - unit to display
  *   unitType: 'front'|'below' (optional) - unit display style
  */
-export function TrendChart({ id, title, trendWindow, setTrendWindow, trendData, unit, unitType }) {
+export function TrendChart({ id, title, trendWindow, trendData, unit, unitType, isLoading }) {
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
+  const chartRef = React.useRef(null); // To hold the chart instance
 
   // Use lighter green for current values in dark mode
-  // Use lighter green for current values and headings in dark mode
   const valueColor = isDark ? 'rgb(178,213,48)' : 'rgb(31, 79, 34)';
   const headingColor = valueColor;
 
@@ -37,32 +37,31 @@ export function TrendChart({ id, title, trendWindow, setTrendWindow, trendData, 
     if (maxVal >= 1e3) return { title: 'Thousands', factor: 1e3, suffix: 'k' };
     return { title: '', factor: 1, suffix: '' };
   }
-  const yMax = trendData.length > 0 ? Math.max(...trendData.map((d) => Math.abs(d.y))) : 0;
-  const yFormat = getYAxisFormat(yMax);
+
   function formatXAxis(ts, window) {
     const date = new Date(ts);
     if (window === 'day') {
       // DD HH:MM (locale-aware)
-      return date.toLocaleString(undefined, { day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
+      return date.toLocaleString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false });
     } else {
-      // DD MMM YYYY (locale-aware)
-      return date.toLocaleString(undefined, { day: '2-digit', month: 'short', year: 'numeric' });
+      // DD MMM (locale-aware)
+      return date.toLocaleString(undefined, { day: '2-digit', month: 'short' });
     }
   }
 
   React.useEffect(() => {
-    const ctx = document.getElementById(id);
-    if (ctx) {
-      if (ctx._chartInstance) ctx._chartInstance.destroy();
-      let numPoints = trendData.length;
-        let valueDisplay = (
-          <Typography variant="body2" sx={{ color: '#aaa' }}>
-            --
-          </Typography>
-        );
-      const allLabels = trendData.map((d) => formatXAxis(d.x, trendWindow));
-      // No manual tick indices; let Chart.js handle x-axis ticks
-      ctx._chartInstance = new Chart(ctx, {
+    const canvas = document.getElementById(id);
+    if (!canvas || !trendData || trendData.length === 0) {
+      return;
+    }
+
+    const yMax = Math.max(...trendData.map((d) => Math.abs(d.y)));
+    const yFormat = getYAxisFormat(yMax);
+    const allLabels = trendData.map((d) => formatXAxis(d.x, trendWindow));
+
+    if (!chartRef.current) {
+      // Create chart instance on initial render
+      chartRef.current = new Chart(canvas, {
         type: 'line',
         data: {
           labels: allLabels,
@@ -70,43 +69,31 @@ export function TrendChart({ id, title, trendWindow, setTrendWindow, trendData, 
             {
               label: title,
               data: trendData.map((d) => d.y),
-              backgroundColor: 'rgba(83,166,38,0.15)', //  green, semi-transparent
-              borderColor: 'rgb(83,166,38)', //  green
+              backgroundColor: 'rgba(83,166,38,0.15)',
+              borderColor: 'rgb(83,166,38)',
               borderWidth: 2,
               fill: true,
               pointRadius: 0,
-              pointHoverRadius: 0,
-              pointBorderWidth: 0,
-              pointBackgroundColor: 'rgba(0,0,0,0)',
-              pointBorderColor: 'rgba(0,0,0,0)',
             },
           ],
         },
         options: {
           responsive: true,
           maintainAspectRatio: false,
+          animation: false, // Disable animations
           plugins: { legend: { display: false }, title: { display: false } },
-          elements: { point: { radius: 0, hoverRadius: 0, borderWidth: 0 } },
           scales: {
             x: {
-              title: { display: false },
               ticks: {
                 autoSkip: true,
-                maxTicksLimit: 5,
+                maxTicksLimit: 7,
                 color: isDark ? 'rgba(255, 255, 255, 0.6)' : 'rgba(0, 0, 0, 0.7)',
               },
-              grid: {
-                color: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
-              },
+              grid: { color: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)' },
             },
             y: {
-              title: {
-                display: false,
-              },
               beginAtZero: true,
-              grid: {
-                color: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
-              },
+              grid: { color: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)' },
               ticks: {
                 color: isDark ? 'rgba(255, 255, 255, 0.6)' : 'rgba(0, 0, 0, 0.7)',
                 callback: function (value) {
@@ -122,11 +109,31 @@ export function TrendChart({ id, title, trendWindow, setTrendWindow, trendData, 
           },
         },
       });
+    } else {
+      // Update chart instance with new data
+      const chart = chartRef.current;
+      chart.data.labels = allLabels;
+      chart.data.datasets[0].data = trendData.map((d) => d.y);
+      // Also update the y-axis formatting based on the new data
+      chart.options.scales.y.ticks.callback = function (value) {
+        if (yFormat.factor === 1) return value.toLocaleString();
+        const v = value / yFormat.factor;
+        if (v % 1 === 0) return v + yFormat.suffix;
+        if (Math.abs(v) < 10) return v.toFixed(2).replace(/\.?0+$/, '') + yFormat.suffix;
+        if (Math.abs(v) < 100) return v.toFixed(1).replace(/\.?0+$/, '') + yFormat.suffix;
+        return Math.round(v) + yFormat.suffix;
+      };
+      chart.update('none'); // Use 'none' to prevent animations on update
     }
+
+    // Cleanup function to destroy chart on component unmount
     return () => {
-      if (ctx && ctx._chartInstance) ctx._chartInstance.destroy();
+      if (chartRef.current) {
+        chartRef.current.destroy();
+        chartRef.current = null;
+      }
     };
-  }, [id, trendWindow, title, trendData]);
+  }, [trendData, isDark]); // Only re-run the effect when trendData or theme changes
 
   // Value display logic
   const lastValue = trendData.length > 0 ? trendData[trendData.length - 1].y : null;
@@ -388,61 +395,69 @@ export function StackedChart({ id, title, trendWindow, setTrendWindow, labels, c
   // Render chart when data changes
   React.useEffect(() => {
     const ctx = document.getElementById(id);
-    if (ctx && internalChartData) {
-      if (ctx._chartInstance) ctx._chartInstance.destroy();
-      ctx._chartInstance = new Chart(ctx, {
-        type: 'line',
-        data: internalChartData,
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: { legend: { display: false }, title: { display: false } },
-          elements: { point: { radius: 0, hoverRadius: 0, borderWidth: 0 } },
-          scales: {
-            x: {
-              title: { display: false },
-              ticks: {
-                autoSkip: true,
-                maxTicksLimit: 5,
-                color: isDark ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.7)',
+    if (ctx) {
+      // Always destroy existing chart and create fresh one
+      if (ctx._chartInstance) {
+        ctx._chartInstance.destroy();
+        ctx._chartInstance = null;
+      }
+      
+      // Only create new chart if we have data
+      if (internalChartData && internalChartData.labels && internalChartData.labels.length > 0) {
+        ctx._chartInstance = new Chart(ctx, {
+          type: 'line',
+          data: internalChartData,
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false }, title: { display: false } },
+            elements: { point: { radius: 0, hoverRadius: 0, borderWidth: 0 } },
+            scales: {
+              x: {
+                title: { display: false },
+                ticks: {
+                  autoSkip: true,
+                  maxTicksLimit: 5,
+                  color: isDark ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.7)',
+                },
+                grid: {
+                  color: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
+                },
               },
-              grid: {
-                color: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
-              },
-            },
-            y: {
-              stacked: true,
-              title: {
-                display: false,
-              },
-              beginAtZero: true,
-              grid: {
-                color: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
-              },
-              ticks: {
-                color: isDark ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.7)',
-                callback: function (value) {
-                  if (yFormat.factor === 1) return value.toLocaleString();
-                  const v = value / yFormat.factor;
-                  if (v % 1 === 0) return v + yFormat.suffix;
-                  if (Math.abs(v) < 10) return v.toFixed(2).replace(/\.?0+$/, '') + yFormat.suffix;
-                  if (Math.abs(v) < 100) return v.toFixed(1).replace(/\.?0+$/, '') + yFormat.suffix;
-                  return Math.round(v) + yFormat.suffix;
+              y: {
+                stacked: true,
+                title: {
+                  display: false,
+                },
+                beginAtZero: true,
+                grid: {
+                  color: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
+                },
+                ticks: {
+                  color: isDark ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.7)',
+                  callback: function (value) {
+                    if (yFormat.factor === 1) return value.toLocaleString();
+                    const v = value / yFormat.factor;
+                    if (v % 1 === 0) return v + yFormat.suffix;
+                    if (Math.abs(v) < 10) return v.toFixed(2).replace(/\.?0+$/, '') + yFormat.suffix;
+                    if (Math.abs(v) < 100) return v.toFixed(1).replace(/\.?0+$/, '') + yFormat.suffix;
+                    return Math.round(v) + yFormat.suffix;
+                  },
                 },
               },
             },
+            interaction: {
+              mode: 'index',
+              intersect: false,
+            },
           },
-          interaction: {
-            mode: 'index',
-            intersect: false,
-          },
-        },
-      });
+        });
+      }
     }
     return () => {
       if (ctx && ctx._chartInstance) ctx._chartInstance.destroy();
     };
-  }, [id, internalChartData]);
+  }, [id, internalChartData]); // Only update when data actually changes
 
   // Time window display mapping
   const timeLabels = {
