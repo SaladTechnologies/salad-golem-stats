@@ -89,7 +89,7 @@ export default function MetricsBar({ metrics = [] }) {
               sx={{
                 color,
                 lineHeight: 1.05,
-                fontSize: { xs: '2.2rem', sm: '3.2rem', md: '4.2rem' },
+                fontSize: { xs: '3.2rem', sm: '3.2rem', md: '4.2rem' },
                 whiteSpace: 'nowrap',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
