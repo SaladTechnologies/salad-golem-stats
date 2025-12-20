@@ -508,34 +508,43 @@ export default function Dashboard() {
           }}
         >
           {/* MetricsBar: summary metrics above network activity */}
-          {statsTotals && (
-            <MetricsBar
-              key={globalTimeWindow + '-' + Object.values(statsTotals).join('-')}
-              metrics={[
-                {
-                  value: statsTotals.unique_node_count ?? 0,
-                  unit: '',
-                  label: 'Active nodes (last week)',
-                },
-                {
-                  value: statsTotals.total_invoice_amount ?? 0,
-                  unit: '$',
-                  label: 'Fees paid (last week)',
-                },
-                {
-                  value: statsTotals.total_time_seconds ?? 0,
-                  unit: 'sec',
-                  label: 'Compute time (last week)',
-                },
-                {
-                  value: statsTotals.total_transaction_count ?? 0,
-                  unit: '',
-                  label: 'Transactions (last week)',
-                },
-                // Add more metrics as needed
-              ]}
-            />
-          )}
+          {statsTotals &&
+            (() => {
+              const periodLabel =
+                globalTimeWindow === 'day'
+                  ? 'last day'
+                  : globalTimeWindow === 'week'
+                    ? 'last week'
+                    : 'last month';
+              return (
+                <MetricsBar
+                  key={globalTimeWindow + '-' + Object.values(statsTotals).join('-')}
+                  metrics={[
+                    {
+                      value: statsTotals.unique_node_count ?? 0,
+                      unit: '',
+                      label: `Active nodes (${periodLabel})`,
+                    },
+                    {
+                      value: statsTotals.total_invoice_amount ?? 0,
+                      unit: '$',
+                      label: `Fees paid (${periodLabel})`,
+                    },
+                    {
+                      value: statsTotals.total_time_seconds ?? 0,
+                      unit: 'sec',
+                      label: `Compute time (${periodLabel})`,
+                    },
+                    {
+                      value: statsTotals.total_transaction_count ?? 0,
+                      unit: '',
+                      label: `Transactions (${periodLabel})`,
+                    },
+                    // Add more metrics as needed
+                  ]}
+                />
+              );
+            })()}
           {/* Dashboard Title and Intro */}
           <Grid container spacing={4} sx={{ alignItems: 'stretch' }} direction="row">
             <Grid
