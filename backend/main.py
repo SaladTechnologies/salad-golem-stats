@@ -237,8 +237,61 @@ def get_metrics(metric: str, period: str = "day", gpu: str = "all"):
             return {metric: [{"x": r[0], "y": r[1]} for r in rows]}
 
 
-# Generalized endpoint for hourly/daily GPU stats (for 'all' group)
 @app.get("/metrics/stats")
+def get_stats_summary(
+    period: str = Query(
+        "day",
+        enum=["day", "week", "month"],
+        description="Time period: day, week, or month, default: day",
+    ),
+    gpu: str = Query(
+        "all",
+        description="GPUs to consider: all, any_gpu, no_gpu, specific gpu class, or any GUID (default: all)",
+    ),
+):
+    """
+    Returns a dict of summed values for each metric over the provided period and gpu group.
+    Metrics: total_time_seconds, total_invoice_amount, unique_node_count, total_transaction_count
+    """
+    metrics = [
+        "total_time_seconds",
+        "total_invoice_amount",
+        "unique_node_count",
+        "total_transaction_count",
+    ]
+    allowed_periods = ["day", "week", "month"]
+    if period not in allowed_periods:
+        raise HTTPException(status_code=400, detail=f"Invalid period. Allowed: {allowed_periods}")
+
+    results = {}
+    for metric in metrics:
+        query_info = get_table_parameters(metric=metric, period=period)
+        table = query_info["table"]
+        ts_col = query_info["ts_col"]
+        since = query_info["since"]
+        params = (gpu, since)
+        if table == "hourly_gpu_stats" and ts_col == "day":
+            query = f"""
+                SELECT SUM({metric}) as value
+                FROM {table}
+                WHERE gpu_group = %s AND hour >= %s
+            """
+        else:
+            query = f"""
+                SELECT SUM({metric}) as value
+                FROM {table}
+                WHERE gpu_group = %s AND {ts_col} >= %s
+            """
+        with get_db_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(query, params)
+                row = cur.fetchone()
+                results[metric] = row[0] if row and row[0] is not None else 0
+    return results
+
+
+# Generalized endpoint for hourly/daily GPU stats (for 'all' group)
+@app.get("/metrics/trends")
 def assemble_metrics(
     period: str = Query(
         "day",

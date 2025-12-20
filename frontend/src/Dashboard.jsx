@@ -1,3 +1,17 @@
+// Fast-loading hook for metrics bar totals
+function useStatsTotals(period = 'week', gpu = 'all') {
+  const [totals, setTotals] = useState(null);
+  useEffect(() => {
+    fetch(`${import.meta.env.VITE_STATS_API_URL}/metrics/stats?period=${period}&gpu=${gpu}`)
+      .then((res) => (res.ok ? res.json() : Promise.reject('Failed to fetch stats totals')))
+      .then((data) => setTotals(data))
+      .catch((err) => {
+        console.error('Error loading stats totals:', err);
+        setTotals(null);
+      });
+  }, [period, gpu]);
+  return totals;
+}
 // Dashboard.jsx - Main dashboard component for Stats Salad
 // Uses Material-UI, Chart.jsx, react-globe.gl, and custom chart components
 
@@ -68,7 +82,7 @@ function StyledHeading({ children, mt = 2, ...props }) {
           mt,
           mb: 0.5,
           color: theme.palette.primary.main,
-          fontSize: '1.25rem',
+          fontSize: '1.75rem',
         })}
         className="w-block"
         {...props}
@@ -211,13 +225,12 @@ export default function Dashboard() {
   // Create theme based on current mode
   const theme = createAppTheme(themeMode);
 
-  // Helper to fetch stats summary for the bottom section
+  // Helper to fetch stats summary for the bottom section (trends)
   function useStatsSummary(period = 'month', gpu = 'all') {
     const [stats, setStats] = useState(null);
     useEffect(() => {
-      // Don't clear existing data - keep old charts visible during loading
       setIsLoading(true);
-      fetch(`${import.meta.env.VITE_STATS_API_URL}/metrics/stats?period=${period}&gpu=${gpu}`)
+      fetch(`${import.meta.env.VITE_STATS_API_URL}/metrics/trends?period=${period}&gpu=${gpu}`)
         .then((res) => (res.ok ? res.json() : Promise.reject('Failed to fetch stats')))
         .then((data) => {
           setStats(data);
@@ -234,6 +247,8 @@ export default function Dashboard() {
     return stats;
   }
 
+  // Fast totals for metrics bar
+  const statsTotals = useStatsTotals(globalTimeWindow, 'all');
   const statsSummary = useStatsSummary(globalTimeWindow, 'all');
   // State for city node data
   const [cityData, setCityData] = useState([]);
@@ -493,26 +508,27 @@ export default function Dashboard() {
           }}
         >
           {/* MetricsBar: summary metrics above network activity */}
-          {statsSummary && (
+          {statsTotals && (
             <MetricsBar
+              key={globalTimeWindow + '-' + Object.values(statsTotals).join('-')}
               metrics={[
                 {
-                  value: statsSummary.unique_node_count?.at(-1)?.y ?? 0,
+                  value: statsTotals.unique_node_count ?? 0,
                   unit: '',
                   label: 'Active nodes (last week)',
                 },
                 {
-                  value: statsSummary.total_invoice_amount?.at(-1)?.y ?? 0,
+                  value: statsTotals.total_invoice_amount ?? 0,
                   unit: '$',
                   label: 'Fees paid (last week)',
                 },
                 {
-                  value: statsSummary.total_time_seconds?.at(-1)?.y ?? 0,
+                  value: statsTotals.total_time_seconds ?? 0,
                   unit: 'sec',
                   label: 'Compute time (last week)',
                 },
                 {
-                  value: statsSummary.total_transaction_count?.at(-1)?.y ?? 0,
+                  value: statsTotals.total_transaction_count ?? 0,
                   unit: '',
                   label: 'Transactions (last week)',
                 },

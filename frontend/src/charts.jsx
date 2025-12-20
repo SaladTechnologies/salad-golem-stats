@@ -555,15 +555,6 @@ export function StackedChart({
       : 0;
   const yFormat = getYAxisFormat(yMax);
 
-  // Debug: Log the max values to see why scales differ
-  React.useEffect(() => {
-    if (yMax > 0) {
-      console.log(
-        `Chart ${id}: stacked yMax = ${yMax.toLocaleString()}, scale = ${yFormat.suffix || 'raw'}`,
-      );
-    }
-  }, [yMax, yFormat.suffix, id]);
-
   // Render chart when data changes
   React.useEffect(() => {
     const ctx = document.getElementById(id);
