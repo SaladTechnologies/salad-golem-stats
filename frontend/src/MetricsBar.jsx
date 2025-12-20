@@ -41,8 +41,8 @@ export default function MetricsBar({ metrics = [] }) {
   const brightGreen =
     theme.palette.lime || (theme.palette.salad && theme.palette.salad.lime) || '#B2D530';
   const navy = (theme.palette.salad && theme.palette.salad.navy) || '#0A2133';
-  const bg = isDark ? brightGreen : theme.palette.grey[900];
-  const color = isDark ? navy : theme.palette.success.main;
+  const bg = isDark ? brightGreen : navy;
+  const color = isDark ? navy : brightGreen;
 
   // Each metric is a flex item, wraps as a unit, label can wrap
   return (
