@@ -54,17 +54,17 @@ export default function TransactionsTable({ data }) {
           );
         },
       },
-      { accessorKey: 'gpu', header: 'GPU' },
-      {
-        accessorKey: 'ram',
-        header: 'RAM (GB)',
-        cell: (info) => {
-          const v = info.getValue();
-          return v ? Math.round(Number(v) / 1024) : '';
-        },
-      },
-      { accessorKey: 'vcpus', header: 'vCPUs' },
-      { accessorKey: 'duration', header: 'Duration' },
+      //{ accessorKey: 'gpu', header: 'GPU' },
+      // {
+      //   accessorKey: 'ram',
+      //   header: 'RAM (GB)',
+      //   cell: (info) => {
+      //     const v = info.getValue();
+      //     return v ? Math.round(Number(v) / 1024) : '';
+      //   },
+      // },
+      //{ accessorKey: 'vcpus', header: 'vCPUs' },
+      //{ accessorKey: 'duration', header: 'Duration' },
       { accessorKey: 'invoiced_glm', header: 'GLM' },
       {
         accessorKey: 'invoiced_dollar',

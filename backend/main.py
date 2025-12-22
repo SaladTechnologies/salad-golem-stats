@@ -59,13 +59,13 @@ def get_table_parameters(metric: str, period: str):
         "total_transaction_count",
     ]:
         table = "hourly_gpu_stats"
-        if period == "day" or period == "week":
+        if period == "day":
             ts_col = "hour"
         else:
             ts_col = "day"
 
     elif metric in ["unique_node_count", "unique_node_ram", "unique_node_cpu"]:
-        if period == "day" or period == "week":
+        if period == "day":
             table = "hourly_distinct_counts"
             ts_col = "hour"
         else:
@@ -78,6 +78,8 @@ def get_table_parameters(metric: str, period: str):
         since = now - timedelta(days=1)
     elif period == "week":
         since = now - timedelta(weeks=1)
+    elif period == "twoweeks":
+        since = now - timedelta(weeks=2)
     elif period == "month":
         since = now - timedelta(days=31)
     return {"since": since, "table": table, "ts_col": ts_col}
@@ -204,7 +206,7 @@ def get_metrics_by_gpu(metric: str, period: str = "month", group_by: str = "gpu"
             return {metric: {"labels": labels, "datasets": output}}
 
 
-def get_metrics(metric: str, period: str = "day", gpu: str = "all"):
+def get_metrics(metric: str, period: str = "week", gpu: str = "all"):
     """
     Returns a time series for the given metric (for the 'all' gpu_group), as a list of {ts, value} dicts.
     Allowed metrics: total_time_seconds, total_invoice_amount, total_ram_hours, total_cpu_hours, total_transaction_count
@@ -240,9 +242,9 @@ def get_metrics(metric: str, period: str = "day", gpu: str = "all"):
 @app.get("/metrics/stats")
 def get_stats_summary(
     period: str = Query(
-        "day",
-        enum=["day", "week", "month"],
-        description="Time period: day, week, or month, default: day",
+        "week",
+        enum=["week", "twoweeks", "month"],
+        description="Time period: week, twoweeks, or month, default: day",
     ),
     gpu: str = Query(
         "all",
@@ -294,9 +296,9 @@ def get_stats_summary(
 @app.get("/metrics/trends")
 def assemble_metrics(
     period: str = Query(
-        "day",
-        enum=["day", "week", "month"],
-        description="Time period: day, week, or month, default: day",
+        "week",
+        enum=["week", "twoweeks", "month"],
+        description="Time period: week, twoweeks, or month, default: week",
     ),
     gpu: str = Query(
         "all",
@@ -325,7 +327,7 @@ def assemble_metrics(
         "total_time_seconds",
     ]
 
-    allowed_periods = ["day", "week", "month"]
+    allowed_periods = ["week", "twoweeks", "month"]
 
     if period not in allowed_periods:
         raise HTTPException(status_code=400, detail=f"Invalid period. Allowed: {allowed_periods}")
@@ -428,9 +430,9 @@ def get_transactions(
 @app.get("/metrics/gpu_stats")
 def gpu_stats(
     period: str = Query(
-        "day",
-        enum=["day", "week", "month"],
-        description="Time period: day, week, or month, default: day",
+        "week",
+        enum=["week", "twoweeks", "month"],
+        description="Time period: week, twoweeks, or month, default: week",
     ),
     metric: str = Query(
         "total_time_seconds",
