@@ -382,97 +382,72 @@ def get_transactions(
     """
     Returns a list of placeholder transaction records for demo/testing, with cursor-based pagination.
     """
-    now = datetime.now(timezone.utc)
-    # For demo, generate a fixed window of 7 days of fake transactions
-    window_days = 7
-    end_dt = now
-    start_dt = end_dt - timedelta(days=window_days)
+    # Query the placeholder_transactions table with cursor-based pagination
+    with get_db_conn() as conn:
+        with conn.cursor() as cur:
+            # Count total transactions
+            cur.execute("SELECT COUNT(*) FROM placeholder_transactions")
+            total = cur.fetchone()[0]
 
-    # Generate a pool of fake transactions (sorted by timestamp descending)
-    providers = [
-        "0x0B220b82F3eA3B7F6d9A1D8ab58930C064A2b5Bf",
-        "0xA1B2c3D4E5F678901234567890abcdef12345678",
-        "0xBEEF1234567890abcdef1234567890ABCDEF1234",
-    ]
-    requesters = [
-        "0xD50f254E7E6ABe1527879c2E4E23B9984c783295",
-        "0xC0FFEE1234567890abcdef1234567890ABCDEF12",
-        "0xDEADBEEF1234567890abcdef1234567890ABCDEF",
-    ]
-    gpus = ["RTX 4090", "RTX 4080", "RTX 3090", "RTX 3060", "A100", "Other"]
-    txs = [
-        "0xe3f9e48f556dbec85b0031ddbb157893eb4f4bb1564577a7f36ef19834790986",
-        "0xabc1234567890abcdef1234567890abcdef1234567890abcdef1234567890ab",
-        "0xdef9876543210abcdef1234567890abcdef1234567890abcdef1234567890cd",
-    ]
+            # Build the base query
+            base_query = """
+                SELECT ts, provider_wallet, requester_wallet, tx, gpu, ram, vcpus, duration, invoiced_glm, invoiced_dollar
+                FROM placeholder_transactions
+            """
+            order = "DESC" if direction == "next" else "ASC"
+            where = []
+            params = []
+            if cursor:
+                op = "<" if direction == "next" else ">"
+                where.append(f"ts {op} %s")
+                params.append(cursor)
+            if where:
+                base_query += " WHERE " + " AND ".join(where)
+            base_query += f" ORDER BY ts {order} LIMIT %s"
+            params.append(limit)
 
-    # For demo, generate a large pool (e.g., 500) of fake transactions
-    total_fake = 500
-    all_transactions = []
-    for i in range(total_fake):
-        # Evenly distribute timestamps over the window
-        ts = (start_dt + timedelta(seconds=i * (window_days * 24 * 3600) // total_fake)).replace(
-            microsecond=0
-        )
-        duration_minutes = random.randint(5, 120)
-        duration = timedelta(minutes=duration_minutes)
-        all_transactions.append(
-            {
-                "ts": ts.isoformat(),
-                "provider_wallet": random.choice(providers),
-                "requester_wallet": random.choice(requesters),
-                "tx": random.choice(txs),
-                "gpu": random.choice(gpus),
-                "ram": random.choice([8192, 16384, 20480, 32768, 65536]),
-                "vcpus": random.choice([4, 8, 16, 32]),
-                "duration": str(duration),
-                "invoiced_glm": round(random.uniform(0.5, 10.0), 2),
-                "invoiced_dollar": round(random.uniform(0.1, 5.0), 2),
+            cur.execute(base_query, params)
+            rows = cur.fetchall()
+
+            # Always return newest first (descending)
+            if direction == "prev":
+                rows = rows[::-1]
+
+            page_transactions = []
+            for r in rows:
+                page_transactions.append(
+                    {
+                        "ts": r[0].isoformat() if hasattr(r[0], "isoformat") else str(r[0]),
+                        "provider_wallet": r[1],
+                        "requester_wallet": r[2],
+                        "tx": r[3],
+                        "gpu": r[4],
+                        "ram": r[5],
+                        "vcpus": r[6],
+                        "duration": str(r[7]),
+                        "invoiced_glm": float(r[8]),
+                        "invoiced_dollar": float(r[9]),
+                    }
+                )
+
+            # Set next/prev cursors
+            next_cursor = (
+                page_transactions[-1]["ts"]
+                if page_transactions and len(page_transactions) == limit and direction == "next"
+                else None
+            )
+            prev_cursor = (
+                page_transactions[0]["ts"]
+                if page_transactions and cursor is not None and direction == "next"
+                else None
+            )
+
+            return {
+                "transactions": page_transactions,
+                "next_cursor": next_cursor,
+                "prev_cursor": prev_cursor,
+                "total": total,
             }
-        )
-    # Sort descending by timestamp (newest first)
-    all_transactions.sort(key=lambda x: x["ts"], reverse=True)
-
-    # Cursor logic
-    if cursor:
-        # Find the index of the transaction matching the cursor
-        try:
-            cursor_idx = next(i for i, tx in enumerate(all_transactions) if tx["ts"] == cursor)
-        except StopIteration:
-            cursor_idx = None
-    else:
-        cursor_idx = None
-
-    # Determine slice for pagination
-    if direction == "next":
-        if cursor_idx is None:
-            start_idx = 0
-        else:
-            start_idx = cursor_idx + 1
-        end_idx = start_idx + limit
-    else:  # direction == "prev"
-        if cursor_idx is None:
-            end_idx = limit
-        else:
-            end_idx = cursor_idx
-        start_idx = max(0, end_idx - limit)
-
-    page_transactions = all_transactions[start_idx:end_idx]
-
-    # Set next/prev cursors
-    next_cursor = (
-        page_transactions[-1]["ts"]
-        if page_transactions and end_idx < len(all_transactions)
-        else None
-    )
-    prev_cursor = page_transactions[0]["ts"] if page_transactions and start_idx > 0 else None
-
-    return {
-        "transactions": page_transactions,
-        "next_cursor": next_cursor,
-        "prev_cursor": prev_cursor,
-        "total": len(all_transactions),
-    }
 
 
 @app.get("/metrics/gpu_stats")

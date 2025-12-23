@@ -63,9 +63,26 @@ CREATE TABLE IF NOT EXISTS country_snapshots (
     PRIMARY KEY (ts, name)
 );
 
+-- SQL to create the placeholder_transactions table for demo/test transactions
+CREATE TABLE IF NOT EXISTS placeholder_transactions (
+    id SERIAL PRIMARY KEY,
+    ts TIMESTAMP WITH TIME ZONE NOT NULL,
+    provider_wallet TEXT NOT NULL,
+    requester_wallet TEXT NOT NULL,
+    tx TEXT NOT NULL,
+    gpu TEXT,
+    ram INTEGER,
+    vcpus INTEGER,
+    duration TEXT,
+    invoiced_glm DOUBLE PRECISION,
+    invoiced_dollar DOUBLE PRECISION
+);
+
+
 -- Indexes for faster queries
 CREATE INDEX IF NOT EXISTS idx_hourly_gpu_stats_hour ON hourly_gpu_stats(hour);
 CREATE INDEX IF NOT EXISTS idx_hourly_distinct_counts_hour ON hourly_distinct_counts(hour);
 CREATE INDEX IF NOT EXISTS idx_daily_distinct_counts_day ON daily_distinct_counts(day);
 CREATE INDEX IF NOT EXISTS idx_gpu_classes_id ON gpu_classes(gpu_class_id);
+CREATE INDEX IF NOT EXISTS idx_placeholder_transactions_ts ON placeholder_transactions(ts DESC);
 
