@@ -531,8 +531,8 @@ export default function Dashboard() {
                       label: `Fees paid (${periodLabel})`,
                     },
                     {
-                      value: statsTotals.total_time_seconds ?? 0,
-                      unit: 'sec',
+                      value: statsTotals.total_time_hours ?? 0,
+                      unit: 'hours',
                       label: `Compute time (${periodLabel})`,
                     },
                     {
@@ -624,7 +624,7 @@ export default function Dashboard() {
             </Grid>
           </Grid>
 
-          <StyledPaper>
+          <StyledPaper sx={{ pb: 0 }}>
             {/* Transactions Table */}
             <Box sx={{ width: '100%' }}>
               <StyledHeading>Network Transactions</StyledHeading>
@@ -665,13 +665,13 @@ export default function Dashboard() {
 
                   <Grid size={{ xs: 12, sm: 6 }}>
                     <TrendChart
-                      id="trend-total-time-seconds"
-                      title="Compute Time (s)"
+                      id="trend-total-time-hours"
+                      title="Compute Time (hr)"
                       description="Time customer workloads ran on SaladCloud."
                       trendWindow={globalTimeWindow}
                       setTrendWindow={() => {}}
-                      trendData={statsSummary.total_time_seconds || []}
-                      unit="sec"
+                      trendData={statsSummary.total_time_hours || []}
+                      unit="hours"
                       unitType="below"
                       isLoading={isLoading}
                     />
@@ -770,12 +770,12 @@ export default function Dashboard() {
                     {(() => {
                       const gpuTimeData = createStackedChartData(
                         statsSummary,
-                        'gpu_total_time_seconds',
+                        'gpu_total_time_hours',
                       );
                       return (
                         <StackedChart
                           id="gpuStackedChartTime"
-                          title="GPUs Time by Model (s)"
+                          title="GPUs Time by Model (hr)"
                           description="Time GPU customer workloads were running on SaladCloud, by GPU."
                           trendWindow={globalTimeWindow}
                           setTrendWindow={() => {}}
@@ -790,7 +790,7 @@ export default function Dashboard() {
                     {(() => {
                       const gpuVramTimeData = createStackedChartData(
                         statsSummary,
-                        'vram_total_time_seconds',
+                        'vram_total_time_hours',
                       );
                       return (
                         <StackedChart

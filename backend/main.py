@@ -53,6 +53,7 @@ def get_table_parameters(metric: str, period: str):
     now = datetime.utcnow()
     if metric in [
         "total_time_seconds",
+        "total_time_hours",
         "total_invoice_amount",
         "total_ram_hours",
         "total_cpu_hours",
@@ -209,7 +210,7 @@ def get_metrics_by_gpu(metric: str, period: str = "month", group_by: str = "gpu"
 def get_metrics(metric: str, period: str = "week", gpu: str = "all"):
     """
     Returns a time series for the given metric (for the 'all' gpu_group), as a list of {ts, value} dicts.
-    Allowed metrics: total_time_seconds, total_invoice_amount, total_ram_hours, total_cpu_hours, total_transaction_count
+    Allowed metrics: total_time_hours, total_invoice_amount, total_ram_hours, total_cpu_hours, total_transaction_count
     """
 
     query_info = get_table_parameters(metric=metric, period=period)
@@ -253,10 +254,10 @@ def get_stats_summary(
 ):
     """
     Returns a dict of summed values for each metric over the provided period and gpu group.
-    Metrics: total_time_seconds, total_invoice_amount, unique_node_count, total_transaction_count
+    Metrics: total_time_hours, total_invoice_amount, unique_node_count, total_transaction_count
     """
     metrics = [
-        "total_time_seconds",
+        "total_time_hours",
         "total_invoice_amount",
         "unique_node_count",
         "total_transaction_count",
@@ -307,10 +308,10 @@ def assemble_metrics(
 ):
     """
     Returns a time series for the given metric (for the specified gpu_group or GUID), as a list of {ts, value} dicts.
-    Allowed metrics: total_time_seconds, total_invoice_amount, total_ram_hours, total_cpu_hours, total_transaction_count
+    Allowed metrics: total_time_hours, total_invoice_amount, total_ram_hours, total_cpu_hours, total_transaction_count
     """
     metrics = [
-        "total_time_seconds",
+        "total_time_hours",
         "total_invoice_amount",
         "total_ram_hours",
         "total_cpu_hours",
@@ -320,11 +321,11 @@ def assemble_metrics(
 
     gpu_metrics = [
         "unique_node_count",
-        "total_time_seconds",
+        "total_time_hours",
     ]
     vram_metrics = [
         "unique_node_count",
-        "total_time_seconds",
+        "total_time_hours",
     ]
 
     allowed_periods = ["week", "twoweeks", "month"]
@@ -435,8 +436,8 @@ def gpu_stats(
         description="Time period: week, twoweeks, or month, default: week",
     ),
     metric: str = Query(
-        "total_time_seconds",
-        description="Metric to return (default: total_time_seconds)",
+        "total_time_hours",
+        description="Metric to return (default: total_time_hours)",
     ),
 ):
     """

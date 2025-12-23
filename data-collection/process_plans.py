@@ -24,8 +24,8 @@ def insert_hourly_gpu_stats(data):
     cur = conn.cursor()
     cur.executemany(
         """
-		INSERT INTO hourly_gpu_stats (hour, gpu_group, total_time_seconds, total_invoice_amount, total_ram_hours, total_cpu_hours, total_transaction_count)
-		VALUES (%s, %s, %s, %s, %s, %s, %s)
+		INSERT INTO hourly_gpu_stats (hour, gpu_group, total_time_seconds, total_time_hours, total_invoice_amount, total_ram_hours, total_cpu_hours, total_transaction_count)
+		VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
 	""",
         data,
     )
@@ -133,13 +133,14 @@ query = f"""
 	base_with_resource_hours AS (
 		SELECT	
 			*,
-			ram * duration AS ram_hours,
-			cpu * duration AS cpu_hours
+			ram * duration / 60 / 60 AS ram_hours,
+			cpu * duration / 60 / 60 AS cpu_hours
 		FROM base
 	), 
 	breakdown AS (
 		SELECT hour, gpu_group,
 			SUM(duration) AS total_time_seconds,
+			SUM(duration) AS total_time_hours,
 			SUM(invoice_amount) AS total_invoice_amount,
 			SUM(ram_hours) AS total_ram_hours,
 			SUM(cpu_hours) AS total_cpu_hours,
@@ -150,6 +151,7 @@ query = f"""
 	gpu_total AS (
 		SELECT hour, 'any_gpu' as gpu_group,
 			SUM(duration) AS total_time_seconds,
+			SUM(duration) AS total_time_hours,
 			SUM(invoice_amount) AS total_invoice_amount	,
 			SUM(ram_hours) AS total_ram_hours,
 			SUM(cpu_hours) AS total_cpu_hours,
@@ -161,6 +163,7 @@ query = f"""
 	total AS (
 		SELECT hour, 'all' as total_group,
 			SUM(duration) AS total_time_seconds,
+			SUM(duration) AS total_time_hours,
 			SUM(invoice_amount) AS total_invoice_amount,
 			SUM(ram_hours) AS total_ram_hours,
 			SUM(cpu_hours) AS total_cpu_hours,
@@ -191,10 +194,11 @@ try:
             row[0],  # hour (timestamp)
             row[1],  # gpu_group
             row[2],  # total_time_seconds
-            row[3],  # total_invoice_amount
-            row[4],  # total_ram_hours
-            row[5],  # total_cpu_hours
-            row[6],  # total_transaction_count
+            row[3],  # total_time_hours
+            row[4],  # total_invoice_amount
+            row[5],  # total_ram_hours
+            row[6],  # total_cpu_hours
+            row[7],  # total_transaction_count
         )
         for row in results
     ]

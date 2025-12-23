@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS hourly_gpu_stats (
     hour TIMESTAMP NOT NULL,
     gpu_group TEXT NOT NULL,
     total_time_seconds DOUBLE PRECISION,
+    total_time_hours DOUBLE PRECISION,
     total_invoice_amount DOUBLE PRECISION,
     total_ram_hours DOUBLE PRECISION,
     total_cpu_hours DOUBLE PRECISION,

@@ -19,7 +19,7 @@ const getAxisColors = (isDark) => ({
 const formatTooltipDate = (timestamp, window) => {
   const date = new Date(timestamp);
   if (window === 'day') {
-    // More detailed: "Dec 19, 2024 at 14:30"
+    // UTC: "Dec 19, 2024 at 14:30 UTC"
     return date.toLocaleString(undefined, {
       month: 'short',
       day: 'numeric',
@@ -27,23 +27,17 @@ const formatTooltipDate = (timestamp, window) => {
       hour: '2-digit',
       minute: '2-digit',
       hour12: false,
-    });
-  } else if (window === 'week') {
-    // More detailed: "Dec 19, 2024 at 14:30"
-    return date.toLocaleString(undefined, {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
+      timeZone: 'UTC',
+      timeZoneName: 'short',
     });
   } else {
-    // Month view: "Dec 19, 2024" (no time)
+    // Month view: "Dec 19, 2024 UTC"
     return date.toLocaleString(undefined, {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
+      timeZone: 'UTC',
+      timeZoneName: 'short',
     });
   }
 };
@@ -108,16 +102,24 @@ export function TrendChart({
   function formatXAxis(ts, window) {
     const date = new Date(ts);
     if (window === 'day') {
-      // DD HH:MM (locale-aware)
+      // DD HH:MM (UTC)
       return date.toLocaleString(undefined, {
         day: '2-digit',
         hour: '2-digit',
         minute: '2-digit',
         hour12: false,
+        timeZone: 'UTC',
+        timeZoneName: 'short',
       });
     } else {
-      // DD MMM YYYY (locale-aware)
-      return date.toLocaleString(undefined, { day: '2-digit', month: 'short', year: 'numeric' });
+      // DD MMM YYYY (UTC)
+      return date.toLocaleString(undefined, {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        timeZone: 'UTC',
+        timeZoneName: 'short',
+      });
     }
   }
 
