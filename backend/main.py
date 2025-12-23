@@ -378,6 +378,14 @@ def get_transactions(
     direction: str = Query(
         "next", enum=["next", "prev"], description="Pagination direction: next or prev"
     ),
+    sort_by: str = Query(
+        "time",
+        enum=["time", "glm", "usd"],
+        description="Sort by: time, GLM, or USD (default: time)",
+    ),
+    sort_order: str = Query(
+        "desc", enum=["asc", "desc"], description="Sort order: asc or desc (default: desc)"
+    ),
 ):
     """
     Returns a list of placeholder transaction records for demo/testing, with cursor-based pagination.
@@ -394,23 +402,41 @@ def get_transactions(
                 SELECT ts, provider_wallet, requester_wallet, tx, gpu, ram, vcpus, duration, invoiced_glm, invoiced_dollar
                 FROM placeholder_transactions
             """
-            order = "DESC" if direction == "next" else "ASC"
-            where = []
-            params = []
-            if cursor:
-                op = "<" if direction == "next" else ">"
-                where.append(f"ts {op} %s")
-                params.append(cursor)
-            if where:
-                base_query += " WHERE " + " AND ".join(where)
-            base_query += f" ORDER BY ts {order} LIMIT %s"
+
+            # Determine sort column
+            sort_column = {
+                "time": "ts",
+                "glm": "invoiced_glm",
+                "usd": "invoiced_dollar",
+            }[sort_by]
+            order = sort_order.upper()
+
+            # Handle different navigation cases
+            if direction == "next":
+                # Next page: get records older than cursor (or newest if no cursor)
+                if cursor:
+                    base_query += f" WHERE {sort_column} < %s"
+                    params = [cursor]
+                else:
+                    params = []
+            else:  # direction == "prev"
+                if cursor:
+                    # Previous page: get records newer than cursor
+                    base_query += f" WHERE {sort_column} > %s"
+                    params = [cursor]
+                else:
+                    # Last page: get the oldest records
+                    params = []
+
+            base_query += f" ORDER BY {sort_column} {order} LIMIT %s"
             params.append(limit)
 
             cur.execute(base_query, params)
             rows = cur.fetchall()
 
-            # Always return newest first (descending)
+            # Always return newest first (descending order) for UI consistency
             if direction == "prev":
+                # For both prev with cursor and Last page, we got ASC order, so reverse it
                 rows = rows[::-1]
 
             page_transactions = []
@@ -430,17 +456,53 @@ def get_transactions(
                     }
                 )
 
-            # Set next/prev cursors
-            next_cursor = (
-                page_transactions[-1]["ts"]
-                if page_transactions and len(page_transactions) == limit and direction == "next"
-                else None
-            )
-            prev_cursor = (
-                page_transactions[0]["ts"]
-                if page_transactions and cursor is not None and direction == "next"
-                else None
-            )
+            # Determine cursors for navigation
+            next_cursor = None
+            prev_cursor = None
+
+            if page_transactions:
+                if direction == "next":
+                    # Check if there are older records (for next button)
+                    cur.execute(
+                        "SELECT COUNT(*) FROM placeholder_transactions WHERE ts < %s",
+                        (page_transactions[-1]["ts"],),
+                    )
+                    if cur.fetchone()[0] > 0:
+                        next_cursor = page_transactions[-1]["ts"]
+
+                    # Check if there are newer records (for prev button)
+                    cur.execute(
+                        "SELECT COUNT(*) FROM placeholder_transactions WHERE ts > %s",
+                        (page_transactions[0]["ts"],),
+                    )
+                    if cur.fetchone()[0] > 0:
+                        prev_cursor = page_transactions[0]["ts"]
+
+                else:  # direction == "prev"
+                    if cursor:
+                        # Check if there are newer records (for prev button)
+                        cur.execute(
+                            "SELECT COUNT(*) FROM placeholder_transactions WHERE ts > %s",
+                            (page_transactions[0]["ts"],),
+                        )
+                        if cur.fetchone()[0] > 0:
+                            prev_cursor = page_transactions[0]["ts"]
+
+                        # Check if there are older records (for next button)
+                        cur.execute(
+                            "SELECT COUNT(*) FROM placeholder_transactions WHERE ts < %s",
+                            (page_transactions[-1]["ts"],),
+                        )
+                        if cur.fetchone()[0] > 0:
+                            next_cursor = page_transactions[-1]["ts"]
+                    else:
+                        # This is the "Last" page (oldest records) - check if there are newer records
+                        cur.execute(
+                            "SELECT COUNT(*) FROM placeholder_transactions WHERE ts > %s",
+                            (page_transactions[0]["ts"],),
+                        )
+                        if cur.fetchone()[0] > 0:
+                            prev_cursor = page_transactions[0]["ts"]
 
             return {
                 "transactions": page_transactions,

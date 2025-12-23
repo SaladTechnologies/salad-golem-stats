@@ -14,14 +14,15 @@
   "dependencies": {
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
+    "@mui/icons-material": "^7.3.6",
     "@mui/material": "^7.3.6",
     "@mui/styled-engine": "^7.3.6",
-    "@tanstack/react-table": "^8.13.4",
+    "@tanstack/react-table": "^8.21.3",
     "chart.js": "^4.5.1",
     "chartjs-adapter-date-fns": "^3.0.0",
     "date-fns": "^4.1.0",
-    "react": "^19.2.0",
-    "react-dom": "^19.2.0",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3",
     "react-globe.gl": "^2.37.0",
     "three": "^0.181.2"
   },
@@ -37,6 +38,6 @@
     "eslint-plugin-react-refresh": "^0.4.24",
     "globals": "^16.5.0",
     "prettier": "^3.7.4",
-    "vite": "^7.2.4"
+    "vite": "^7.3.0"
   }
 }

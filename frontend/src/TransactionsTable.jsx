@@ -1,4 +1,7 @@
 import React from 'react';
+import { useTheme } from '@mui/material';
+import ArrowDropUpIcon from '@mui/icons-material/ArrowDropUp';
+import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import { useReactTable, getCoreRowModel, flexRender } from '@tanstack/react-table';
 import {
   Paper,
@@ -15,7 +18,7 @@ import {
 import { Box, Button, Select, MenuItem } from '@mui/material';
 
 export default function TransactionsTable() {
-  // Pagination state for cursor-based API
+  // Pagination and sorting state for cursor-based API
   const [pageSize, setPageSize] = React.useState(10);
   const [transactions, setTransactions] = React.useState([]);
   const [nextCursor, setNextCursor] = React.useState(null);
@@ -24,6 +27,8 @@ export default function TransactionsTable() {
   const [direction, setDirection] = React.useState('next');
   const [totalRows, setTotalRows] = React.useState(0);
   const [loading, setLoading] = React.useState(false);
+  const [sortBy, setSortBy] = React.useState('time');
+  const [sortOrder, setSortOrder] = React.useState('desc');
 
   // Fetch transactions from backend
   const fetchTransactions = React.useCallback(
@@ -33,15 +38,22 @@ export default function TransactionsTable() {
       params.append('limit', opts.pageSize ?? pageSize);
       if (opts.cursor) params.append('cursor', opts.cursor);
       if (opts.direction) params.append('direction', opts.direction);
+      params.append('sort_by', opts.sortBy ?? sortBy);
+      params.append('sort_order', opts.sortOrder ?? sortOrder);
       fetch(`${import.meta.env.VITE_STATS_API_URL}/metrics/transactions?${params.toString()}`)
         .then((res) => (res.ok ? res.json() : Promise.reject('Failed to fetch transactions')))
         .then((data) => {
-          setTransactions(data.transactions || []);
-          setNextCursor(data.next_cursor || null);
-          setPrevCursor(data.prev_cursor || null);
-          setTotalRows(data.total || 0);
-          setCurrentCursor(opts.cursor || null);
-          setDirection(opts.direction || 'next');
+          if (data.transactions && data.transactions.length > 0) {
+            setTransactions(data.transactions);
+            setNextCursor(data.next_cursor || null);
+            setPrevCursor(data.prev_cursor || null);
+            setTotalRows(data.total || 0);
+            setCurrentCursor(opts.cursor || null);
+            setDirection(opts.direction || 'next');
+          } else {
+            // Optionally, show a message or flash a warning here
+            // Do not update state, so user stays on last valid page
+          }
         })
         .catch((err) => {
           setTransactions([]);
@@ -51,19 +63,28 @@ export default function TransactionsTable() {
         })
         .finally(() => setLoading(false));
     },
-    [pageSize],
+    [pageSize, sortBy, sortOrder],
   );
 
-  // Initial load and when pageSize changes
+  // Initial load and when pageSize, sortBy, or sortOrder changes
   React.useEffect(() => {
-    fetchTransactions({ pageSize, cursor: null, direction: 'next' });
-  }, [pageSize, fetchTransactions]);
+    fetchTransactions({ pageSize, cursor: null, direction: 'next', sortBy, sortOrder });
+  }, [pageSize, sortBy, sortOrder, fetchTransactions]);
 
   const columns = React.useMemo(
     () => [
       {
         accessorKey: 'ts',
-        header: 'Timestamp (UTC)',
+        header: () => (
+          <SortableHeader
+            label="Timestamp (UTC)"
+            sortKey="time"
+            sortBy={sortBy}
+            sortOrder={sortOrder}
+            setSortBy={setSortBy}
+            setSortOrder={setSortOrder}
+          />
+        ),
         cell: (info) => (info.getValue() ? String(info.getValue()).replace('T', ' ') : ''),
       },
       {
@@ -101,28 +122,38 @@ export default function TransactionsTable() {
           );
         },
       },
-      //{ accessorKey: 'gpu', header: 'GPU' },
-      // {
-      //   accessorKey: 'ram',
-      //   header: 'RAM (GB)',
-      //   cell: (info) => {
-      //     const v = info.getValue();
-      //     return v ? Math.round(Number(v) / 1024) : '';
-      //   },
-      // },
-      //{ accessorKey: 'vcpus', header: 'vCPUs' },
-      //{ accessorKey: 'duration', header: 'Duration' },
-      { accessorKey: 'invoiced_glm', header: 'GLM' },
+      {
+        accessorKey: 'invoiced_glm',
+        header: () => (
+          <SortableHeader
+            label="GLM"
+            sortKey="glm"
+            sortBy={sortBy}
+            sortOrder={sortOrder}
+            setSortBy={setSortBy}
+            setSortOrder={setSortOrder}
+          />
+        ),
+      },
       {
         accessorKey: 'invoiced_dollar',
-        header: 'USD',
+        header: () => (
+          <SortableHeader
+            label="USD"
+            sortKey="usd"
+            sortBy={sortBy}
+            sortOrder={sortOrder}
+            setSortBy={setSortBy}
+            setSortOrder={setSortOrder}
+          />
+        ),
         cell: (info) => {
           const v = info.getValue();
           return v !== undefined && v !== null ? `$${v}` : '';
         },
       },
     ],
-    [],
+    [sortBy, sortOrder],
   );
 
   const table = useReactTable({
@@ -130,6 +161,72 @@ export default function TransactionsTable() {
     columns,
     getCoreRowModel: getCoreRowModel(),
   });
+
+  // SortableHeader component for column headers
+  function SortableHeader({ label, sortKey, sortBy, sortOrder, setSortBy, setSortOrder }) {
+    const isActive = sortBy === sortKey;
+    const handleClick = () => {
+      if (isActive) {
+        setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+      } else {
+        setSortBy(sortKey);
+        setSortOrder('desc');
+      }
+    };
+    // Use MUI theme to reactively update arrow color
+    const theme = useTheme();
+    const arrowColor = theme.palette.mode === 'dark' ? '#444' : '#ddd';
+    return (
+      <span
+        className={`sortable-header${isActive ? ' active' : ''}`}
+        onClick={handleClick}
+        style={{
+          cursor: 'pointer',
+          display: 'inline-flex',
+          alignItems: 'center',
+          userSelect: 'none',
+        }}
+      >
+        {label}
+        {isActive ? (
+          sortOrder === 'asc' ? (
+            <ArrowDropUpIcon className="sort-arrow active" style={{ color: '#00c853' }} />
+          ) : (
+            <ArrowDropDownIcon className="sort-arrow active" style={{ color: '#00c853' }} />
+          )
+        ) : (
+          <span
+            className="sort-arrow gray"
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              marginLeft: 2,
+              alignItems: 'center',
+              height: 18,
+              justifyContent: 'center',
+            }}
+          >
+            <ArrowDropUpIcon
+              style={{
+                color: arrowColor,
+                fontSize: '1.75em',
+                marginTop: '-0em',
+                marginBottom: '-.3em',
+              }}
+            />
+            <ArrowDropDownIcon
+              style={{
+                color: arrowColor,
+                fontSize: '1.75em',
+                marginBottom: '-00em',
+                marginTop: '-.3em',
+              }}
+            />
+          </span>
+        )}
+      </span>
+    );
+  }
 
   return (
     <>
@@ -165,51 +262,91 @@ export default function TransactionsTable() {
         </Select>
         <Button
           size="small"
-          onClick={() =>
-            fetchTransactions({
-              pageSize,
-              cursor: prevCursor,
-              direction: 'prev',
-            })
-          }
-          disabled={!prevCursor}
-          sx={(theme) => ({
-            color: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.6)',
-          })}
-        >
-          Prev
-        </Button>
-        <Button
-          size="small"
-          onClick={() =>
+          variant="outlined"
+          onClick={() => {
             fetchTransactions({
               pageSize,
               cursor: null,
               direction: 'next',
-            })
-          }
-          disabled={!prevCursor && !currentCursor}
+            });
+          }}
+          disabled={!prevCursor}
           sx={(theme) => ({
             color: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.6)',
+            borderColor:
+              theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)',
+            background: 'none',
+            boxShadow: 'none',
+            textTransform: 'none',
           })}
         >
-          Latest
+          First
         </Button>
         <Button
           size="small"
-          onClick={() =>
+          variant="outlined"
+          onClick={() => {
+            fetchTransactions({
+              pageSize,
+              cursor: prevCursor,
+              direction: 'prev',
+            });
+          }}
+          disabled={!prevCursor}
+          sx={(theme) => ({
+            color: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.6)',
+            borderColor:
+              theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)',
+            background: 'none',
+            boxShadow: 'none',
+            textTransform: 'none',
+          })}
+        >
+          Previous
+        </Button>
+        <Button
+          size="small"
+          variant="outlined"
+          onClick={() => {
             fetchTransactions({
               pageSize,
               cursor: nextCursor,
               direction: 'next',
-            })
-          }
+            });
+          }}
           disabled={!nextCursor}
           sx={(theme) => ({
             color: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.6)',
+            borderColor:
+              theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)',
+            background: 'none',
+            boxShadow: 'none',
+            textTransform: 'none',
           })}
         >
           Next
+        </Button>
+        <Button
+          size="small"
+          variant="outlined"
+          onClick={() => {
+            fetchTransactions({
+              pageSize,
+              cursor: null,
+              direction: 'prev',
+            });
+          }}
+          disabled={!nextCursor}
+          sx={(theme) => ({
+            color: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.6)',
+            borderColor:
+              theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)',
+            background: 'none',
+            boxShadow: 'none',
+            textTransform: 'none',
+          })}
+        >
+          Last
         </Button>
       </Box>
       <Divider sx={{ mt: 2, mb: 2 }} />

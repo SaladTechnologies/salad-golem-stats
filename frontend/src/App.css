@@ -1,3 +1,23 @@
+
+/* Sortable header arrows */
+.sortable-header {
+  transition: color 0.2s;
+}
+.sortable-header .sort-arrow {
+  font-size: 1.2em;
+  margin-left: 2px;
+  vertical-align: middle;
+  transition: color 0.2s;
+}
+.sortable-header .sort-arrow.gray {
+  color: #bbb;
+}
+.sortable-header.active {
+  color: #00c853;
+}
+.sortable-header:hover .sort-arrow {
+  color: #888;
+}
 #root {
   max-width: 1280px;
   margin: 0 auto;

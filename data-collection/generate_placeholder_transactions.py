@@ -28,7 +28,7 @@ def random_tx_hash():
     return "0x" + secrets.token_hex(32)
 
 
-def generate_placeholder_transactions(total_fake=500, window_days=31):
+def generate_placeholder_transactions(total_fake=103, window_days=31):
     now = datetime.now(timezone.utc)
     end_dt = now
     start_dt = end_dt - timedelta(days=window_days)
