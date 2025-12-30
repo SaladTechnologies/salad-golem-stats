@@ -267,15 +267,16 @@ export default function Dashboard() {
       });
   }, []);
 
-  // Load city node count data from API endpoint on mount
+  // Load node count data from API endpoint on mount
   useEffect(() => {
-    fetch(`${import.meta.env.VITE_STATS_API_URL}/metrics/city_counts`)
+    fetch(`${import.meta.env.VITE_STATS_API_URL}/metrics/geo_counts`)
       .then((res) => (res.ok ? res.json() : Promise.reject('Failed to fetch city data')))
       .then((data) => {
-        setCityData(data);
+          setCityData(data);
       })
       .catch((err) => {
         console.error('Error loading cityData:', err);
+        setCityData([]);
       });
   }, []);
 

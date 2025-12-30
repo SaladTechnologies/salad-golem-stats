@@ -16,12 +16,22 @@
 
 3. Run the server:
 
+
+## Clearing the Redis Cache
+
+To clear all keys from the Redis cache, use the provided script:
+
+     python clear_redis_cache.py
+
+You can set the following environment variables to configure the Redis connection (defaults shown):
+
+     REDIS_HOST=localhost
+     REDIS_PORT=6379
+     REDIS_DB=0
+
+The script requires the `redis` Python package (already included in requirements.txt).
     uvicorn main:app --reload
 
-## Endpoints
-
-- `GET /metrics/total_nodes` — latest total node count
-- `GET /metrics/city_counts` — city node counts (with lat/lon)
 - `GET /metrics/country_counts` — country node counts (with lat/lon)
 - `POST /metrics/load` — submit node loading stats (see `LoadStats` model)
 

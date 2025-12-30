@@ -78,21 +78,48 @@ export default function GlobeComponent({ theme, themeMode, cityData }) {
 
   return (
     <div ref={globeContainerRef}>
-      <Globe
-        ref={globeNetworkRef}
-        width={480}
-        height={400}
-        globeImageUrl={themeMode === 'dark' ? '/earth-night.jpg' : '/earth-light.jpg'}
-        backgroundColor={theme.palette.background.default}
-        onPointOfViewChanged={handleGlobeViewChange}
-        hexBinPointsData={cityData}
-        hexBinPointLat={(d) => d.lat}
-        hexBinPointLng={(d) => d.lon}
-        hexBinResolution={3}
-        hexAltitude={(d) => Math.min(0.15, d.sumWeight * 0.01)}
-        hexTopColor={() => (themeMode === 'dark' ? saladPalette.midGreen : saladPalette.green)}
-        hexSideColor={() => (themeMode === 'dark' ? saladPalette.midGreen : saladPalette.darkGreen)}
-      />
+      {/* Defensive: only render Globe if cityData is a non-empty array with valid GeoJSON */}
+      {Array.isArray(cityData) && cityData.length > 0 && cityData.every(d => d.type === 'Feature') ? (
+        <Globe
+          ref={globeNetworkRef}
+          width={480}
+          height={400}
+          globeImageUrl={themeMode === 'dark' ? '/earth-night.jpg' : '/earth-light.jpg'}
+          backgroundColor={theme.palette.background.default}
+          onPointOfViewChanged={handleGlobeViewChange}
+          polygonsData={cityData}
+          polygonAltitude={(d) => {
+            // Use backend's normalized value for consistent altitude
+            const normalized = d.properties.normalized || 0;
+            return Math.max(0.002, normalized * 0.06);
+          }}
+          polygonCapColor={(d) => {
+            // Simple color based on normalized value
+            const intensity = d.properties.normalized || 0;
+            if (themeMode === 'dark') {
+              const alpha = Math.max(0.4, intensity);
+              return `rgba(120, 200, 60, ${alpha})`;
+            } else {
+              const alpha = Math.max(0.5, intensity);
+              return `rgba(83, 166, 38, ${alpha})`;
+            }
+          }}
+          polygonSideColor={(d) => {
+            const intensity = d.properties.normalized || 0;
+            const alpha = Math.max(0.3, intensity * 0.8);
+            return `rgba(31, 79, 34, ${alpha})`;
+          }}
+          polygonStrokeColor={() => '#00000000'}
+          polygonsTransitionDuration={800}
+          polygonLabel={(d) => `<div style="background: rgba(0,0,0,0.8); color: white; padding: 8px; border-radius: 4px; font-size: 12px;"><b>Nodes: ${d.properties.count}</b><br/>Hex: ${d.properties.hex.slice(0,8)}...</div>`}
+          enablePointerInteraction={true}
+          animateIn={false}
+        />
+      ) : (
+        <div style={{ width: 480, height: 400, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <span style={{ color: theme.palette.text.secondary }}>Loading globe data...</span>
+        </div>
+      )}
     </div>
   );
 }

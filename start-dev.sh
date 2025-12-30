@@ -13,12 +13,12 @@ sleep 5
 echo "Applying DB migrations..."
 docker exec -i dev-postgres psql -U devuser -d statsdb -f /migrations/001_init.sql
 
+#echo "Starting frontend..."
+cd ../frontend
+npm run dev & FRONTEND_PID=$!
+
 echo "Starting backend..."
 cd ../backend
 # optional: activate venv
 source ./venv/bin/activate
-python main.py & BACKEND_PID=$!
-
-#echo "Starting frontend..."
-cd ../frontend
-npm run dev & FRONTEND_PID=$!
+python main.py 
