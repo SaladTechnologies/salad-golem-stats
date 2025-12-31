@@ -430,7 +430,7 @@ def assemble_metrics(
 # New endpoint: /metrics/geo_counts
 @app.get("/metrics/geo_counts")
 @cache_response("geo_counts")
-def get_geo_counts(resolution: int = 5):
+def get_geo_counts(resolution: int = 4):
     """
     Returns city counts aggregated to H3 hexagons on the backend.
     Backend has full control over aggregation logic.

@@ -91,9 +91,11 @@ export default function GlobeComponent({ theme, themeMode, cityData }) {
           hexBinPointsData={cityData}
           hexBinPointLat="lat"
           hexBinPointLng="lng"
-          hexBinPointWeight="count"
-          hexBinResolution={5}
+          hexBinPointWeight="normalized"
+          hexBinResolution={4}
           enablePointerInteraction={true}
+          hexTopColor={() => (themeMode === 'dark' ? saladPalette.midGreen : saladPalette.green)}
+          hexSideColor={() => (themeMode === 'dark' ? saladPalette.midGreen : saladPalette.darkGreen)}
           animateIn={false}
         />
       ) : (
