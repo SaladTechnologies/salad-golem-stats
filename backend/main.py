@@ -478,8 +478,7 @@ def get_geo_counts(resolution: int = 4):
                     point_data = {
                         "lat": center_lat,
                         "lng": center_lng,
-                        "normalized": normalized_count,
-                        "count": count
+                        "normalized": normalized_count
                     }
                     result.append(point_data)
                 except Exception as e:

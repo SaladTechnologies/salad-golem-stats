@@ -9,7 +9,7 @@ const saladPalette = {
   midGreen: 'rgb(120,200,60)',
 };
 
-export default function GlobeComponent({ theme, themeMode, cityData }) {
+function GlobeComponent({ theme, themeMode, cityData }) {
   if (!theme) {
     return null; // Don't render if theme is not available yet
   }
@@ -107,3 +107,13 @@ export default function GlobeComponent({ theme, themeMode, cityData }) {
     </div>
   );
 }
+
+// Custom comparison: only re-render if cityData, theme, or themeMode change
+function areEqual(prevProps, nextProps) {
+  if (prevProps.themeMode !== nextProps.themeMode) return false;
+  if (prevProps.theme !== nextProps.theme) return false;
+  if (prevProps.cityData !== nextProps.cityData) return false;
+  return true;
+}
+
+export default React.memo(GlobeComponent, areEqual);
