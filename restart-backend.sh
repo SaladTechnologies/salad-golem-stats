@@ -27,6 +27,8 @@ fi
 echo "Restarting backend..."
 cd backend
 
+docker exec dev-redis redis-cli FLUSHALL
+
 # Activate virtual environment if it exists
 if [ -f "./venv/bin/activate" ]; then
     source ./venv/bin/activate

@@ -326,8 +326,8 @@ def get_metrics(metric: str, period: str = "week", gpu: str = "all"):
 def get_stats_summary(
     period: str = Query(
         "week",
-        enum=["week", "two_weeks", "month"],
-        description="Time period: week, two_weeks, or month, default: day",
+        enum=["day", "week", "two_weeks", "month"],
+        description="Time period: day, week, two_weeks, or month, default: day",
     ),
     gpu: str = Query(
         "all",
@@ -344,7 +344,7 @@ def get_stats_summary(
         "unique_node_count",
         "total_transaction_count",
     ]
-    allowed_periods = ["week", "two_weeks", "month"]
+    allowed_periods = ["day", "week", "two_weeks", "month"]
     if period not in allowed_periods:
         raise HTTPException(status_code=400, detail=f"Invalid period. Allowed: {allowed_periods}")
 
@@ -381,8 +381,8 @@ def get_stats_summary(
 def assemble_metrics(
     period: str = Query(
         "week",
-        enum=["week", "two_weeks", "month"],
-        description="Time period: week, two_weeks, or month, default: week",
+        enum=["day", "week", "two_weeks", "month"],
+        description="Time period: day, week, two_weeks, or month, default: week",
     ),
     gpu: str = Query(
         "all",
@@ -411,7 +411,7 @@ def assemble_metrics(
         "total_time_hours",
     ]
 
-    allowed_periods = ["week", "two_weeks", "month"]
+    allowed_periods = ["day", "week", "two_weeks", "month"]
 
     if period not in allowed_periods:
         raise HTTPException(status_code=400, detail=f"Invalid period. Allowed: {allowed_periods}")
@@ -431,6 +431,8 @@ def assemble_metrics(
         )[metric]
 
     return assembled_metrics
+
+
 # New endpoint: /metrics/geo_counts
 @app.get("/metrics/geo_counts")
 @cache_response("geo_counts")
@@ -450,43 +452,43 @@ def get_geo_counts(resolution: int = 4):
                 """
             )
             rows = cur.fetchall()
-            
+
             # Backend aggregation: group cities by H3 hexagon with full control
             hex_counts = {}
             max_count = 0
-            
+
             for r in rows:
                 lat, lon, count = r[2], r[3], r[1]
                 hex_id = h3.latlng_to_cell(lat, lon, resolution)
                 hex_counts[hex_id] = hex_counts.get(hex_id, 0) + count
                 max_count = max(max_count, hex_counts[hex_id])
-            
+
             # Backend control: include all hexagons (no filtering)
             sorted_hexes = sorted(hex_counts.items(), key=lambda x: x[1], reverse=True)
-            
+
             # Convert H3 hex IDs to center points
             result = []
             for hex_id, count in sorted_hexes:
                 try:
                     # Get center lat/lng of the hex
                     center_lat, center_lng = h3.cell_to_latlng(hex_id)
-                    
+
                     # Backend control: calculate normalized value
                     normalized_count = count / max_count if max_count > 0 else 0
-                    
+
                     # Return simplified hex center data
                     point_data = {
                         "lat": center_lat,
                         "lng": center_lng,
-                        "normalized": normalized_count
+                        "normalized": normalized_count,
                     }
                     result.append(point_data)
                 except Exception as e:
                     print(f"[ERROR] Failed to process hex {hex_id}: {e}")
                     continue
-            
+
             return result
-         
+
 
 @app.get("/metrics/city_counts")
 @cache_response("city_counts")
@@ -653,8 +655,8 @@ def get_transactions(
 def gpu_stats(
     period: str = Query(
         "week",
-        enum=["week", "two_weeks", "month"],
-        description="Time period: week, two_weeks, or month, default: week",
+        enum=["day", "week", "two_weeks", "month"],
+        description="Time period: day, week, two_weeks, or month, default: week",
     ),
     metric: str = Query(
         "total_time_hours",

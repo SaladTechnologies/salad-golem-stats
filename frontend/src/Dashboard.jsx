@@ -269,11 +269,11 @@ export default function Dashboard() {
 
   // Load node count data from API endpoint only once on mount
   useEffect(() => {
-    console.log("Fetching globe cityData...");
+    console.log('Fetching globe cityData...');
     fetch(`${import.meta.env.VITE_STATS_API_URL}/metrics/geo_counts`)
       .then((res) => (res.ok ? res.json() : Promise.reject('Failed to fetch city data')))
       .then((data) => {
-          setCityData(data);
+        setCityData(data);
       })
       .catch((err) => {
         console.error('Error loading cityData:', err);
@@ -437,6 +437,7 @@ export default function Dashboard() {
         </a>
         <Box sx={{ display: 'flex', gap: 1, mr: 3, alignItems: 'center' }}>
           {[
+            { key: 'day', label: '1d' },
             { key: 'week', label: '7d' },
             { key: 'two_weeks', label: '14d' },
             { key: 'month', label: '31d' },
@@ -539,7 +540,9 @@ export default function Dashboard() {
                   ? 'last day'
                   : globalTimeWindow === 'week'
                     ? 'last week'
-                    : 'last month';
+                    : globalTimeWindow === 'two_weeks'
+                      ? 'last two weeks'
+                      : 'last month';
               return (
                 <MetricsBar
                   key={globalTimeWindow + '-' + Object.values(statsTotals).join('-')}
