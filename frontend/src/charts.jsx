@@ -289,6 +289,10 @@ export function TrendChart({
 
   function formatValue(val, unit) {
     if (val === null || val === undefined) return { value: '--', unit };
+    // If unit is 'count', always show as integer, no decimals or suffixes
+    if (unit === 'count' || unit === 'nodes') {
+      return { value: Math.round(val).toLocaleString(), unit };
+    }
     // Special handling for GB
     if (unit === 'GB') {
       if (Math.abs(val) >= 1e12) {
@@ -863,17 +867,16 @@ export function StackedChart({
                         }}
                       >
                         {(() => {
+                          if (unit === 'count' || unit === 'nodes') {
+                            // Always show as integer, no decimals or suffixes, even if scaled
+                            return Math.round(val).toLocaleString();
+                          }
                           if (scale.factor === 1) {
-                            // Show decimals for small values, unless unit is count
-                            if (unit === 'count') {
-                              return Math.round(val).toLocaleString();
-                            } else {
-                              // Consistent 1 decimal for all non-count values, keep trailing zeros
-                              return val.toLocaleString(undefined, {
-                                minimumFractionDigits: 1,
-                                maximumFractionDigits: 1,
-                              });
-                            }
+                            // Consistent 1 decimal for all non-count values, keep trailing zeros
+                            return val.toLocaleString(undefined, {
+                              minimumFractionDigits: 1,
+                              maximumFractionDigits: 1,
+                            });
                           } else {
                             const scaledVal = val / scale.factor;
                             // Consistent 1 decimal for all scaled values
@@ -973,18 +976,21 @@ export function StackedChart({
                           }}
                         >
                           {(() => {
+                            if (unit === 'count' || unit === 'nodes') {
+                              // Always show as integer, no decimals or suffixes, even if scaled
+                              return Math.round(val).toLocaleString();
+                            }
                             if (scale.factor === 1) {
-                              // Show decimals for small values, unless unit is count
-                              if (unit === 'count') {
-                                return Math.round(val).toLocaleString();
-                              } else {
-                                // Consistent 1 decimal for all non-count values, keep trailing zeros
-                                return val.toLocaleString(undefined, {
-                                  minimumFractionDigits: 1,
-                                  maximumFractionDigits: 1,
-                                });
-                              }
+                              // Consistent 1 decimal for all non-count values, keep trailing zeros
+                              return val.toLocaleString(undefined, {
+                                minimumFractionDigits: 1,
+                                maximumFractionDigits: 1,
+                              });
                             } else {
+                              // For 'nodes', never show decimals or suffixes, even if scaled
+                              if (unit === 'nodes') {
+                                return Math.round(val).toLocaleString();
+                              }
                               const scaledVal = val / scale.factor;
                               // Consistent 1 decimal for all scaled values
                               return `${scaledVal.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}${scale.suffix}`;
