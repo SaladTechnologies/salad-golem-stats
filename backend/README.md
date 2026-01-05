@@ -1,38 +1,46 @@
-# Salad Stats Backend (FastAPI)
+# Salad Stats Backend
 
-## Setup
+TypeScript/Node.js API built with Fastify.
 
-1. Install dependencies:
+## Development
 
-    pip install -r requirements.txt
+```bash
+npm install
+npm run dev
+```
 
-2. Set environment variables for PostgreSQL connection (or use a .env file):
+## Production
 
-    POSTGRES_DB=your_db
-    POSTGRES_USER=your_user
-    POSTGRES_PASSWORD=your_password
-    POSTGRES_HOST=localhost
-    POSTGRES_PORT=5432
+```bash
+npm run build
+npm start
+```
 
-3. Run the server:
+## Environment Variables
 
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PORT` | `8000` | Server port |
+| `POSTGRES_HOST` | `localhost` | Database host |
+| `POSTGRES_PORT` | `5432` | Database port |
+| `POSTGRES_DB` | `statsdb` | Database name |
+| `POSTGRES_USER` | `devuser` | Database user |
+| `POSTGRES_PASSWORD` | `devpass` | Database password |
+| `REDIS_HOST` | `localhost` | Redis host |
+| `REDIS_PORT` | `6379` | Redis port |
+| `REDIS_DB` | `0` | Redis database |
+| `FRONTEND_ORIGINS` | `http://localhost:5173` | CORS allowed origins |
+| `CACHE_TTL_STATS` | `3600` | Stats endpoint cache TTL (seconds) |
+| `CACHE_TTL_TRENDS` | `3600` | Trends endpoint cache TTL |
+| `CACHE_TTL_CITY` | `86400` | City/geo endpoint cache TTL |
+| `CACHE_TTL_TRANSACTIONS` | `60` | Transactions endpoint cache TTL |
+| `CACHE_TTL_GPU` | `3600` | GPU stats endpoint cache TTL |
 
-## Clearing the Redis Cache
+## API Endpoints
 
-To clear all keys from the Redis cache, use the provided script:
-
-     python clear_redis_cache.py
-
-You can set the following environment variables to configure the Redis connection (defaults shown):
-
-     REDIS_HOST=localhost
-     REDIS_PORT=6379
-     REDIS_DB=0
-
-The script requires the `redis` Python package (already included in requirements.txt).
-    uvicorn main:app --reload
-
-- `GET /metrics/country_counts` — country node counts (with lat/lon)
-- `POST /metrics/load` — submit node loading stats (see `LoadStats` model)
-
-Edit `main.py` to add more endpoints as needed.
+- `GET /metrics/stats` - Summary statistics
+- `GET /metrics/trends` - Time series with GPU/VRAM breakdowns
+- `GET /metrics/city_counts` - City node counts
+- `GET /metrics/geo_counts` - H3 hexagon aggregated data
+- `GET /metrics/transactions` - Paginated transactions
+- `GET /metrics/gpu_stats` - GPU metric breakdowns

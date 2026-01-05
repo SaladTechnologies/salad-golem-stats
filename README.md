@@ -1,103 +1,186 @@
-# Stats Salad Dashboard
+# Salad Stats Dashboard
 
-This project provides a dashboard for visualizing network statistics for SaladCloud's testing on the Golem Network. It includes a frontend React application, a Python FastAPI backend, and a PostgreSQL database.
-
-## Current Project Status
-
-This is a summary of the current state of the project based on recent development notes.
-
-*   **Frontend (`/frontend`):** 
-    *   **Globe:** The globe visualization is working and displays daily active nodes from a snapshot. This could be updated to show live data or only nodes participating in the test, but the current implementation avoids a sparse-looking map.
-    *   **Transaction Table:** The data in this table is currently mocked. 
-    *   **Trend Graphs:** 
-*   **Backend (`/backend`):** The FastAPI backend is functional for its current purpose, serving data to the frontend from the database.
-*   **Data (`/db`, `/data-collection`):** The database contains processed data. The data sources are expected to change.
+A dashboard for visualizing network statistics for SaladCloud's testing on the Golem Network. It includes a React frontend, a TypeScript/Node backend, PostgreSQL database, and Redis caching.
 
 ## Getting Started
 
 ### Prerequisites
 
-*   A shell environment to run the `.sh` script (like Git Bash on Windows, or any standard Linux/macOS shell).
-*   Docker and Docker Compose to run the PostgreSQL database.
-*   Node.js and npm for the frontend.
-*   Python for the backend.
+- Docker and Docker Compose
 
 ### Running the Application
 
-Before running the application you'll need get data either by importing a dumped database or processing a plans database with data-collection/process_plans.py and data-collection/get_globe_data.py (requires credentials for querying Matrix mongo database).
-
-
-Once you have data, the easiest way to get everything running is to use the provided script.
-
-1.  **Set up Environment Variables:** Before running, you must create the required `.env` files as detailed in the "Environment Variables" section below.
-2.  **Run the script:**
-    ```bash
-    ./start-dev.sh
-    ```
-    This script will:
-    *   Start the PostgreSQL database using Docker Compose.
-    *   Start the FastAPI backend with Uvicorn.
-    *   Start the React frontend development server.
-
-## Environment Variables
-
-You will need to create the following `.env` files in their respective directories.
-
-### 1. Frontend (`/frontend/.env`)
-
-This file configures the React application.
-
-```
-VITE_STATS_API_URL="http://localhost:8000"
+```bash
+docker compose up
 ```
 
-### 2. Backend (`/backend/.env`)
+This starts all services with hot reload:
+- **Frontend:** http://localhost:5173
+- **Backend:** http://localhost:8000
+- **PostgreSQL:** localhost:5432
+- **Redis:** localhost:6379
 
-This file configures the FastAPI server and its database connection.
+Database migrations run automatically on first start.
 
+### Loading Dev Data
+
+To load the sample database dump:
+
+```bash
+docker compose exec db psql -U devuser -d statsdb -f /data/statsdb_dump.sql
 ```
-FRONTEND_ORIGINS=http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174
-POSTGRES_USER=devuser
-POSTGRES_PASSWORD=devpass
-POSTGRES_HOST=localhost
-POSTGRES_DB=statsdb
-POSTGRES_PORT=5432
+
+### Common Commands
+
+```bash
+docker compose up           # Start all services
+docker compose up -d        # Start in background
+docker compose down         # Stop all services
+docker compose logs -f      # View logs
+docker compose logs backend # View backend logs only
+
+# Clear Redis cache
+docker compose exec redis redis-cli FLUSHALL
+
+# Access PostgreSQL
+docker compose exec db psql -U devuser -d statsdb
 ```
 
-### 3. Data Collection (`/data-collection/.env`)
+### Production Deployment
 
-This file configures the scripts used for data gathering and processing.
-
-```
-# Postgres connection for writing data
-POSTGRES_USER=devuser
-POSTGRES_PASSWORD=devpass
-POSTGRES_HOST=localhost
-POSTGRES_DB=statsdb
-POSTGRES_PORT=5432
-
-# MongoDB and Strapi credentials for get_data.py (out of date)
-MONGOUSER=
-MONGOPASS=
-MONGO_URL="matrix-production-1.qltsap.mongodb.net"
-DBNAME="matrix"
-MIN_SEL=2003009
-STRAPIURL="https://cms-api.salad.io"
-STRAPIID=
-STRAPIPW=
+```bash
+docker compose -f docker-compose.prod.yaml up -d --build
 ```
 
 ## Project Structure
 
-*   **/backend:** The FastAPI application that serves data via a REST API.
-    *   `main.py`: The main application file.
-    *   **Endpoints:**
-        *   `/metrics/city_counts`: Provides geolocated node counts for the globe visualization.
-        *   `/metrics/transactions`: Serves mocked transaction data.
-        *   `/metrics/trends`: Provides aggregated data for the trend graphs. 
-        *   `/metrics/stats`: Provides aggregated data for stats. 
-*   **/db:** Contains the `docker-compose.yaml` to spin up the PostgreSQL database and a `/migrations` directory with the schema.
-*   **/data-collection:** Contains Python scripts for pulling data from various sources (e.g., Mixpanel, MongoDB) and processing it into the PostgreSQL database.
-*   **/frontend:** A React application built with Vite that consumes the backend API and displays the dashboard.
+```
+├── docker-compose.yaml       # Development (hot reload)
+├── docker-compose.prod.yaml  # Production (built images)
+├── backend/                  # TypeScript/Node API (Fastify)
+│   ├── src/
+│   │   ├── index.ts          # App entry point
+│   │   ├── config.ts         # Environment configuration
+│   │   ├── routes/           # API route handlers
+│   │   ├── services/         # Business logic
+│   │   ├── db/               # Database connection
+│   │   ├── cache/            # Redis caching
+│   │   └── types/            # TypeScript interfaces
+│   ├── Dockerfile
+│   └── package.json
+├── frontend/                 # React app (Vite)
+│   ├── src/
+│   ├── Dockerfile
+│   ├── nginx.conf            # Production nginx config
+│   └── package.json
+├── db/
+│   └── migrations/           # SQL migration files
+└── data-collection/          # Python scripts for data ingestion
+```
 
+## API Endpoints
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /metrics/stats` | Summary statistics for a time period |
+| `GET /metrics/trends` | Time series data with GPU/VRAM breakdowns |
+| `GET /metrics/city_counts` | Geolocated node counts |
+| `GET /metrics/geo_counts` | H3 hexagon-aggregated geo data |
+| `GET /metrics/transactions` | Paginated transaction records |
+| `GET /metrics/gpu_stats` | GPU-specific metric breakdowns |
+
+Query parameters:
+- `period`: `day`, `week`, `two_weeks`, `month`
+- `gpu`: `all`, `any_gpu`, `no_gpu`, or specific GPU class ID
+
+## Environment Variables
+
+Each service has its own `.env` file. Copy the example files to get started:
+
+```bash
+cp backend/.env.example backend/.env
+cp frontend/.env.example frontend/.env
+```
+
+### Backend (`backend/.env`)
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `FRONTEND_ORIGINS` | `http://localhost:5173` | CORS allowed origins (comma-separated) |
+| `POSTGRES_USER` | `devuser` | Database username |
+| `POSTGRES_PASSWORD` | `devpass` | Database password |
+| `POSTGRES_HOST` | `localhost` | Database host |
+| `POSTGRES_DB` | `statsdb` | Database name |
+| `POSTGRES_PORT` | `5432` | Database port |
+| `REDIS_HOST` | `localhost` | Redis host |
+| `REDIS_PORT` | `6379` | Redis port |
+| `REDIS_DB` | `0` | Redis database number |
+| `CACHE_TTL_STATS` | `3600` | Stats endpoint cache TTL (seconds) |
+| `CACHE_TTL_TRENDS` | `3600` | Trends endpoint cache TTL |
+| `CACHE_TTL_CITY` | `86400` | City/geo endpoint cache TTL |
+| `CACHE_TTL_TRANSACTIONS` | `60` | Transactions endpoint cache TTL |
+| `CACHE_TTL_GPU` | `3600` | GPU stats endpoint cache TTL |
+
+### Frontend (`frontend/.env`)
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `VITE_STATS_API_URL` | `http://localhost:8000` | Backend API URL |
+
+> **Note:** When running with Docker Compose, the `POSTGRES_HOST` and `REDIS_HOST` values are automatically overridden to use container networking (`db` and `redis` respectively).
+
+### Data Collection (`data-collection/.env`)
+
+Required for running data ingestion scripts:
+
+```
+POSTGRES_USER=devuser
+POSTGRES_PASSWORD=devpass
+POSTGRES_HOST=localhost
+POSTGRES_DB=statsdb
+POSTGRES_PORT=5432
+
+# MongoDB credentials (for get_data.py)
+MONGOUSER=
+MONGOPASS=
+MONGO_URL=matrix-production-1.qltsap.mongodb.net
+DBNAME=matrix
+
+# Strapi credentials
+STRAPIURL=https://cms-api.salad.io
+STRAPIID=
+STRAPIPW=
+```
+
+## Development
+
+### Running without Docker
+
+If you prefer to run services locally:
+
+```bash
+# Start only db and redis
+docker compose up -d db redis
+
+# Run backend
+cd backend
+npm install
+npm run dev
+
+# Run frontend (in another terminal)
+cd frontend
+npm install
+npm run dev
+```
+
+### Building for Production
+
+```bash
+# Backend
+cd backend
+npm run build
+
+# Frontend
+cd frontend
+npm run build
 ```

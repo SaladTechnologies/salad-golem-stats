@@ -1,0 +1,10 @@
+node_modules
+dist
+*.log
+.env
+.git
+.gitignore
+*.md
+main.py
+requirements.txt
+__pycache__
