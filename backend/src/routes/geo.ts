@@ -24,7 +24,6 @@ const geoCountsQuerySchema = {
 
 export async function geoRoutes(fastify: FastifyInstance): Promise<void> {
   const geoCacheHooks = createCacheHooks('geo_counts');
-  const cityCacheHooks = createCacheHooks('city_counts');
 
   fastify.get<{ Querystring: GeoCountsQuery }>(
     '/metrics/geo_counts',
@@ -74,30 +73,6 @@ export async function geoRoutes(fastify: FastifyInstance): Promise<void> {
           console.error(`[ERROR] Failed to process hex ${hexId}:`, err);
         }
       }
-
-      return result;
-    }
-  );
-
-  fastify.get(
-    '/metrics/city_counts',
-    {
-      preHandler: cityCacheHooks.preHandler,
-      onSend: cityCacheHooks.onSend,
-    },
-    async () => {
-      const rows = await query<CityRow>(`
-        SELECT name, count, lat, long
-        FROM city_snapshots
-        WHERE ts = (SELECT MAX(ts) FROM city_snapshots)
-      `);
-
-      const result: CityCount[] = rows.map((r) => ({
-        city: r.name,
-        count: r.count,
-        lat: r.lat,
-        lon: r.long,
-      }));
 
       return result;
     }

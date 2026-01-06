@@ -58,12 +58,6 @@ export interface GeoPoint {
   normalized: number;
 }
 
-export interface CityCount {
-  city: string;
-  count: number;
-  lat: number;
-  lon: number;
-}
 
 export interface Transaction {
   ts: string;
@@ -83,8 +77,4 @@ export interface TransactionsResponse {
   next_cursor: string | null;
   prev_cursor: string | null;
   total: number;
-}
-
-export interface GpuStatsResponse {
-  [metric: string]: MetricsByGroup;
 }

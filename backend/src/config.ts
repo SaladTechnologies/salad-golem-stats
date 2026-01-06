@@ -22,10 +22,8 @@ export const config = {
   cacheTtl: {
     stats: parseInt(process.env.CACHE_TTL_STATS || '3600', 10),
     trends: parseInt(process.env.CACHE_TTL_TRENDS || '3600', 10),
-    city_counts: parseInt(process.env.CACHE_TTL_CITY || '86400', 10),
-    geo_counts: parseInt(process.env.CACHE_TTL_CITY || '86400', 10),
-    transactions: parseInt(process.env.CACHE_TTL_TRANSACTIONS || '60', 10),
-    gpu_stats: parseInt(process.env.CACHE_TTL_GPU || '3600', 10),
+    geo_counts: parseInt(process.env.CACHE_TTL_GEO || '86400', 10),
+    transactions: parseInt(process.env.CACHE_TTL_TRANSACTIONS || '60', 10)
   },
 } as const;
 

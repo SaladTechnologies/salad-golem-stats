@@ -9,7 +9,7 @@ const saladPalette = {
   midGreen: 'rgb(120,200,60)',
 };
 
-function GlobeComponent({ theme, themeMode, cityData }) {
+function GlobeComponent({ theme, themeMode, geoData }) {
   if (!theme) {
     return null; // Don't render if theme is not available yet
   }
@@ -78,8 +78,8 @@ function GlobeComponent({ theme, themeMode, cityData }) {
 
   return (
     <div ref={globeContainerRef}>
-      {/* Defensive: only render Globe if cityData is a non-empty array with hex points */}
-      {Array.isArray(cityData) && cityData.length > 0 && cityData.every(d => d.lat && d.lng) ? (
+      {/* Defensive: only render Globe if geoData is a non-empty array with hex points */}
+      {Array.isArray(geoData) && geoData.length > 0 && geoData.every((d) => d.lat && d.lng) ? (
         <Globe
           ref={globeNetworkRef}
           width={480}
@@ -88,7 +88,7 @@ function GlobeComponent({ theme, themeMode, cityData }) {
           backgroundColor={theme.palette.background.default}
           onPointOfViewChanged={handleGlobeViewChange}
           polygonsData={[]}
-          hexBinPointsData={cityData}
+          hexBinPointsData={geoData}
           hexBinPointLat="lat"
           hexBinPointLng="lng"
           hexBinPointWeight="normalized"
@@ -96,11 +96,21 @@ function GlobeComponent({ theme, themeMode, cityData }) {
           enablePointerInteraction={true}
           hexAltitude={(d) => Math.min(0.1, d.sumWeight)}
           hexTopColor={() => (themeMode === 'dark' ? saladPalette.midGreen : saladPalette.green)}
-          hexSideColor={() => (themeMode === 'dark' ? saladPalette.midGreen : saladPalette.darkGreen)}
+          hexSideColor={() =>
+            themeMode === 'dark' ? saladPalette.midGreen : saladPalette.darkGreen
+          }
           animateIn={false}
         />
       ) : (
-        <div style={{ width: 480, height: 400, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div
+          style={{
+            width: 480,
+            height: 400,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
           <span style={{ color: theme.palette.text.secondary }}>Loading globe data...</span>
         </div>
       )}
@@ -108,11 +118,11 @@ function GlobeComponent({ theme, themeMode, cityData }) {
   );
 }
 
-// Custom comparison: only re-render if cityData, theme, or themeMode change
+// Custom comparison: only re-render if geoData, theme, or themeMode change
 function areEqual(prevProps, nextProps) {
   if (prevProps.themeMode !== nextProps.themeMode) return false;
   if (prevProps.theme !== nextProps.theme) return false;
-  if (prevProps.cityData !== nextProps.cityData) return false;
+  if (prevProps.geoData !== nextProps.geoData) return false;
   return true;
 }
 

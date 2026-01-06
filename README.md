@@ -84,10 +84,8 @@ docker compose -f docker-compose.prod.yaml up -d --build
 |----------|-------------|
 | `GET /metrics/stats` | Summary statistics for a time period |
 | `GET /metrics/trends` | Time series data with GPU/VRAM breakdowns |
-| `GET /metrics/city_counts` | Geolocated node counts |
 | `GET /metrics/geo_counts` | H3 hexagon-aggregated geo data |
 | `GET /metrics/transactions` | Paginated transaction records |
-| `GET /metrics/gpu_stats` | GPU-specific metric breakdowns |
 
 Query parameters:
 - `period`: `day`, `week`, `two_weeks`, `month`
@@ -117,9 +115,7 @@ cp frontend/.env.example frontend/.env
 | `REDIS_DB` | `0` | Redis database number |
 | `CACHE_TTL_STATS` | `3600` | Stats endpoint cache TTL (seconds) |
 | `CACHE_TTL_TRENDS` | `3600` | Trends endpoint cache TTL |
-| `CACHE_TTL_CITY` | `86400` | City/geo endpoint cache TTL |
 | `CACHE_TTL_TRANSACTIONS` | `60` | Transactions endpoint cache TTL |
-| `CACHE_TTL_GPU` | `3600` | GPU stats endpoint cache TTL |
 
 ### Frontend (`frontend/.env`)
 

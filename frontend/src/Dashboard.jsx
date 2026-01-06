@@ -1,14 +1,20 @@
 // Fast-loading hook for metrics bar totals
 function useStatsTotals(period = 'week', gpu = 'all') {
-  const [totals, setTotals] = useState(null);
+  const [totals, setTotals] = useState(undefined);
   useEffect(() => {
+    let cancelled = false;
     fetch(`${import.meta.env.VITE_STATS_API_URL}/metrics/stats?period=${period}&gpu=${gpu}`)
       .then((res) => (res.ok ? res.json() : Promise.reject('Failed to fetch stats totals')))
-      .then((data) => setTotals(data))
+      .then((data) => {
+        if (!cancelled) setTotals(data);
+      })
       .catch((err) => {
         console.error('Error loading stats totals:', err);
-        setTotals(null);
+        if (!cancelled) setTotals(null);
       });
+    return () => {
+      cancelled = true;
+    };
   }, [period, gpu]);
   return totals;
 }
@@ -250,35 +256,43 @@ export default function Dashboard() {
   // Fast totals for metrics bar
   const statsTotals = useStatsTotals(globalTimeWindow, 'all');
   const statsSummary = useStatsSummary(globalTimeWindow, 'all');
-  // State for city node data
-  const [cityData, setCityData] = useState([]);
-
+  // State for geo node data
+  const [geoData, setGeoData] = useState(undefined);
   // State for transactions data
-  const [transactions, setTransactions] = useState([]);
+  const [transactions, setTransactions] = useState(undefined);
 
   // Fetch transactions on mount
   useEffect(() => {
+    let cancelled = false;
     fetch(`${import.meta.env.VITE_STATS_API_URL}/metrics/transactions?limit=10`)
       .then((res) => (res.ok ? res.json() : Promise.reject('Failed to fetch transactions')))
-      .then((data) => setTransactions(data.transactions || []))
+      .then((data) => {
+        if (!cancelled) setTransactions(data.transactions || []);
+      })
       .catch((err) => {
         console.error('Error loading transactions:', err);
-        setTransactions([]);
+        if (!cancelled) setTransactions(null);
       });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Load node count data from API endpoint only once on mount
   useEffect(() => {
-    console.log('Fetching globe cityData...');
+    let cancelled = false;
     fetch(`${import.meta.env.VITE_STATS_API_URL}/metrics/geo_counts`)
-      .then((res) => (res.ok ? res.json() : Promise.reject('Failed to fetch city data')))
+      .then((res) => (res.ok ? res.json() : Promise.reject('Failed to fetch geo data')))
       .then((data) => {
-        setCityData(data);
+        if (!cancelled) setGeoData(data);
       })
       .catch((err) => {
-        console.error('Error loading cityData:', err);
-        setCityData([]);
+        console.error('Error loading geoData:', err);
+        if (!cancelled) setGeoData(null);
       });
+    return () => {
+      cancelled = true;
+    };
   }, []); // Only run on mount, not on time window change
 
   // Helper function to transform backend data for stacked charts
@@ -533,7 +547,15 @@ export default function Dashboard() {
           }}
         >
           {/* MetricsBar: summary metrics above network activity */}
-          {statsTotals &&
+          {statsTotals === undefined ? (
+            <Typography variant="body2" color="textSecondary">
+              Loading metrics...
+            </Typography>
+          ) : statsTotals === null ? (
+            <Typography variant="body2" color="error">
+              Failed to load metrics.
+            </Typography>
+          ) : (
             (() => {
               const periodLabel =
                 globalTimeWindow === 'day'
@@ -567,11 +589,11 @@ export default function Dashboard() {
                       unit: '',
                       label: `Transactions (${periodLabel})`,
                     },
-                    // Add more metrics as needed
                   ]}
                 />
               );
-            })()}
+            })()
+          )}
           {/* Dashboard Title and Intro */}
           <Grid container spacing={4} sx={{ alignItems: 'stretch' }} direction="row">
             <Grid
@@ -646,7 +668,17 @@ export default function Dashboard() {
                 }}
                 className="w-block"
               >
-                <GlobeComponent theme={theme} themeMode={themeMode} cityData={cityData} />
+                {geoData === undefined ? (
+                  <Typography variant="body2" color="textSecondary">
+                    Loading globe data...
+                  </Typography>
+                ) : geoData === null ? (
+                  <Typography variant="body2" color="error">
+                    Failed to load globe data.
+                  </Typography>
+                ) : (
+                  <GlobeComponent theme={theme} themeMode={themeMode} geoData={geoData} />
+                )}
               </Box>
             </Grid>
           </Grid>
@@ -655,7 +687,17 @@ export default function Dashboard() {
             {/* Transactions Table */}
             <Box sx={{ width: '100%' }}>
               <StyledHeading>Network Transactions</StyledHeading>
-              <TransactionsTable data={transactions} />
+              {transactions === undefined ? (
+                <Typography variant="body2" color="textSecondary">
+                  Loading transactions...
+                </Typography>
+              ) : transactions === null ? (
+                <Typography variant="body2" color="error">
+                  Failed to load transactions.
+                </Typography>
+              ) : (
+                <TransactionsTable data={transactions} />
+              )}
             </Box>
           </StyledPaper>
           <StyledPaper>

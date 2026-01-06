@@ -32,15 +32,12 @@ npm start
 | `FRONTEND_ORIGINS` | `http://localhost:5173` | CORS allowed origins |
 | `CACHE_TTL_STATS` | `3600` | Stats endpoint cache TTL (seconds) |
 | `CACHE_TTL_TRENDS` | `3600` | Trends endpoint cache TTL |
-| `CACHE_TTL_CITY` | `86400` | City/geo endpoint cache TTL |
+| `CACHE_TTL_GEO` | `86400` | Geo endpoint cache TTL |
 | `CACHE_TTL_TRANSACTIONS` | `60` | Transactions endpoint cache TTL |
-| `CACHE_TTL_GPU` | `3600` | GPU stats endpoint cache TTL |
 
 ## API Endpoints
 
 - `GET /metrics/stats` - Summary statistics
 - `GET /metrics/trends` - Time series with GPU/VRAM breakdowns
-- `GET /metrics/city_counts` - City node counts
 - `GET /metrics/geo_counts` - H3 hexagon aggregated data
 - `GET /metrics/transactions` - Paginated transactions
-- `GET /metrics/gpu_stats` - GPU metric breakdowns
