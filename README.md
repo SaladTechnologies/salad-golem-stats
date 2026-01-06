@@ -8,26 +8,45 @@ A dashboard for visualizing network statistics for SaladCloud's testing on the G
 
 - Docker and Docker Compose
 
-### Running the Application
+### Quick Start
+
+Run the setup script to start all services and load data:
 
 ```bash
-docker compose up
+./setup.sh
 ```
 
-This starts all services with hot reload:
+This will:
+1. Start all Docker services
+2. Load the base data dump (`statsdb_dump.sql`)
+3. Apply all database migrations
+4. Import plans data from `db/plans.db`
+5. Clear the Redis cache
+
+Services will be available at:
 - **Frontend:** http://localhost:5173
 - **Backend:** http://localhost:8000
 - **PostgreSQL:** localhost:5432
 - **Redis:** localhost:6379
 
-Database migrations run automatically on first start.
+### Manual Setup
 
-### Loading Dev Data
-
-To load the sample database dump:
+If you prefer manual setup:
 
 ```bash
+# Start services
+docker compose up -d --build
+
+# Load base data
 docker compose exec db psql -U devuser -d statsdb -f /data/statsdb_dump.sql
+
+# Apply migrations
+docker compose exec db psql -U devuser -d statsdb -f /data/migrations/002_plans_tables.sql
+
+# Import plans data (requires Python)
+cd data-collection
+pip install psycopg2-binary python-dotenv
+python import_plans_db.py --clear
 ```
 
 ### Common Commands
@@ -82,12 +101,30 @@ docker compose -f docker-compose.prod.yaml up -d --build
 
 | Endpoint | Description |
 |----------|-------------|
-| `GET /metrics/stats` | Summary statistics for a time period |
-| `GET /metrics/trends` | Time series data with GPU/VRAM breakdowns |
+| `GET /metrics/plans` | Plan metrics with time series (primary endpoint) |
+| `GET /metrics/stats` | Summary statistics (legacy) |
+| `GET /metrics/trends` | Time series data (legacy) |
 | `GET /metrics/geo_counts` | H3 hexagon-aggregated geo data |
 | `GET /metrics/transactions` | Paginated transaction records |
 
+### `/metrics/plans` (Primary)
+
 Query parameters:
+- `period`: `6h`, `24h`, `7d`, `30d`, `90d`, `total` (default: `7d`)
+
+Response includes:
+- `totals`: active_nodes, total_fees, compute_hours, transactions, core_hours, ram_hours, gpu_hours
+- `time_series`: Hourly/daily breakdown of all metrics
+- `gpu_hours_by_model`: GPU compute hours grouped by model
+- `gpu_hours_by_vram`: GPU compute hours grouped by VRAM
+- `active_nodes_by_gpu_model`: Active nodes grouped by GPU model
+- `active_nodes_by_vram`: Active nodes grouped by VRAM
+
+Note: Data has a 2-day offset (data not yet processed by Golem is excluded).
+
+### Legacy Endpoints
+
+Query parameters for `/metrics/stats` and `/metrics/trends`:
 - `period`: `day`, `week`, `two_weeks`, `month`
 - `gpu`: `all`, `any_gpu`, `no_gpu`, or specific GPU class ID
 

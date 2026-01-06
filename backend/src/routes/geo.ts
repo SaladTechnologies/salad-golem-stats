@@ -2,7 +2,7 @@ import { FastifyInstance } from 'fastify';
 import { latLngToCell, cellToLatLng } from 'h3-js';
 import { query } from '../db/connection.js';
 import { createCacheHooks } from '../cache/redis.js';
-import { GeoPoint, CityCount } from '../types/index.js';
+import { GeoPoint } from '../types/index.js';
 
 interface CityRow {
   name: string;

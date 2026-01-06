@@ -78,3 +78,58 @@ export interface TransactionsResponse {
   prev_cursor: string | null;
   total: number;
 }
+
+// Plan metrics types (for Golem integration)
+// Predefined hours: 6, 24, 168 (7d), 720 (30d), 2160 (90d), or 'total'
+export type PlanPeriod = '6h' | '24h' | '7d' | '30d' | '90d' | 'total';
+
+// Granularity for time series data
+export type Granularity = 'hourly' | 'daily';
+
+// Aggregated totals for a time range
+export interface PlanTotals {
+  active_nodes: number;
+  total_fees: number;
+  compute_hours: number;
+  transactions: number;
+  core_hours: number;
+  ram_hours: number;
+  gpu_hours: number;
+}
+
+// Time series data point for plans
+export interface PlanDataPoint {
+  timestamp: string;
+  active_nodes: number;
+  total_fees: number;
+  compute_hours: number;
+  transactions: number;
+  core_hours: number;
+  ram_hours: number;
+  gpu_hours: number;
+}
+
+// Breakdown by GPU model or VRAM
+export interface GroupedMetric {
+  group: string;
+  value: number;
+}
+
+// Full response for plan stats endpoint
+export interface PlanStatsResponse {
+  period: PlanPeriod;
+  granularity: Granularity;
+  data_cutoff: string; // ISO timestamp - data only available up to this point
+  range: {
+    start: string;
+    end: string;
+  };
+  totals: PlanTotals;
+  // Breakdowns by GPU
+  gpu_hours_by_model: GroupedMetric[];
+  gpu_hours_by_vram: GroupedMetric[];
+  active_nodes_by_gpu_model: GroupedMetric[];
+  active_nodes_by_vram: GroupedMetric[];
+  // Time series (hourly or daily based on range)
+  time_series: PlanDataPoint[];
+}
