@@ -31,14 +31,13 @@ const timeLabels = {
 };
 
 // Check if time window uses hourly granularity (7d or less)
-const isHourlyGranularity = (window) =>
-  ['6h', '24h', '7d', 'day', 'week'].includes(window);
+const isHourlyGranularity = (window) => ['6h', '24h', '7d', 'day', 'week'].includes(window);
 
 // Format dates specifically for tooltips (more detailed)
 const formatTooltipDate = (timestamp, window) => {
   const date = new Date(timestamp);
-  if (window === 'day') {
-    // UTC: "Dec 19, 2024 at 14:30 UTC"
+  if (isHourlyGranularity(window)) {
+    // Hourly views (6h, 24h, 7d, day, week): "Dec 19, 2024 at 14:30 UTC"
     return date.toLocaleString(undefined, {
       month: 'short',
       day: 'numeric',
@@ -50,7 +49,7 @@ const formatTooltipDate = (timestamp, window) => {
       timeZoneName: 'short',
     });
   } else {
-    // Month view: "Dec 19, 2024 UTC"
+    // Monthly/longer views: "Dec 19, 2024 UTC"
     return date.toLocaleString(undefined, {
       month: 'short',
       day: 'numeric',
@@ -232,7 +231,6 @@ export function TrendChart({
               bounds: 'data',
               time: {
                 unit: isHourlyGranularity(trendWindow) ? 'hour' : 'day',
-                tooltipFormat: 'yyyy-MM-dd HH:mm',
                 displayFormats: {
                   hour: 'MMM d, HH:mm',
                   day: 'MMM d',
@@ -278,7 +276,6 @@ export function TrendChart({
       chart.options.scales.x.bounds = 'data';
       chart.options.scales.x.time = {
         unit: isHourlyGranularity(trendWindow) ? 'hour' : 'day',
-        tooltipFormat: 'yyyy-MM-dd HH:mm',
         displayFormats: {
           hour: 'MMM d, HH:mm',
           day: 'MMM d',
@@ -333,14 +330,6 @@ export function TrendChart({
 
   // Value display logic
   const lastValue = trendData.length > 0 ? trendData[trendData.length - 1].y : null;
-
-  // Time period clarification for current value
-  const valuePeriodLabel = {
-    day: 'last hour:',
-    week: 'last day:',
-    two_weeks: 'last day:',
-    month: 'last day:',
-  };
 
   function formatValue(val, unit) {
     if (val === null || val === undefined) return { value: '--', unit };
@@ -503,7 +492,7 @@ export function TrendChart({
           className="w-inline-block"
         >
           <Typography variant="caption" sx={{ color: '#aaa', fontSize: '0.8rem', mb: 0.5 }}>
-            {valuePeriodLabel[trendWindow] || 'last day:'}
+            {isHourlyGranularity(trendWindow) ? 'last hour:' : 'last day:'}
           </Typography>
           {valueDisplay}
         </Box>
@@ -671,7 +660,13 @@ export function StackedChart({
             plugins: {
               legend: { display: false },
               title: { display: false },
-              tooltip: getStackedTooltipConfig(isDark, originalTimestamps, trendWindow, unit, legendColors),
+              tooltip: getStackedTooltipConfig(
+                isDark,
+                originalTimestamps,
+                trendWindow,
+                unit,
+                legendColors,
+              ),
             },
             elements: { point: { radius: 0, hoverRadius: 0, borderWidth: 0 } },
             scales: {
@@ -681,7 +676,6 @@ export function StackedChart({
                 bounds: 'data',
                 time: {
                   unit: isHourlyGranularity(trendWindow) ? 'hour' : 'day',
-                  tooltipFormat: 'yyyy-MM-dd HH:mm',
                   displayFormats: {
                     hour: 'MMM d, HH:mm',
                     day: 'MMM d',
@@ -742,7 +736,6 @@ export function StackedChart({
         chart.options.scales.x.bounds = 'data';
         chart.options.scales.x.time = {
           unit: isHourlyGranularity(trendWindow) ? 'hour' : 'day',
-          tooltipFormat: 'yyyy-MM-dd HH:mm',
           displayFormats: {
             hour: 'MMM d, HH:mm',
             day: 'MMM d',
@@ -786,7 +779,13 @@ export function StackedChart({
       chart.options.scales.y.ticks.color = getAxisColors(isDark).tick;
       // Update tooltip config with current theme and timestamps
       const originalTimestamps = chartData ? chartData.labels : [];
-      chart.options.plugins.tooltip = getStackedTooltipConfig(isDark, originalTimestamps, trendWindow, unit, legendColors);
+      chart.options.plugins.tooltip = getStackedTooltipConfig(
+        isDark,
+        originalTimestamps,
+        trendWindow,
+        unit,
+        legendColors,
+      );
       chart.update('none');
     }
   }, [theme.palette.mode, chartData, trendWindow, unit]);

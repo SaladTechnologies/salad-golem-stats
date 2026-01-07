@@ -16,6 +16,20 @@ function GlobeComponent({ theme, themeMode, geoData }) {
   const globeContainerRef = useRef(null);
   const globeNetworkRef = useRef();
 
+  // Memoize color functions to prevent recreation on every render
+  const hexTopColor = React.useMemo(
+    () => () => (themeMode === 'dark' ? saladPalette.midGreen : saladPalette.green),
+    [themeMode],
+  );
+
+  const hexSideColor = React.useMemo(
+    () => () => (themeMode === 'dark' ? saladPalette.midGreen : saladPalette.darkGreen),
+    [themeMode],
+  );
+
+  // Memoize hexAltitude function
+  const hexAltitude = React.useMemo(() => (d) => Math.min(0.1, d.sumWeight), []);
+
   // --- Globe View Persistence ---
   const getInitialGlobeView = () => {
     try {
@@ -86,6 +100,11 @@ function GlobeComponent({ theme, themeMode, geoData }) {
           height={400}
           globeImageUrl={themeMode === 'dark' ? '/earth-night.jpg' : '/earth-light.jpg'}
           backgroundColor={theme.palette.background.default}
+          rendererConfig={{
+            antialias: false,
+            powerPreference: 'high-performance',
+            alpha: false,
+          }}
           onPointOfViewChanged={handleGlobeViewChange}
           polygonsData={[]}
           hexBinPointsData={geoData}
@@ -94,11 +113,9 @@ function GlobeComponent({ theme, themeMode, geoData }) {
           hexBinPointWeight="normalized"
           hexBinResolution={4}
           enablePointerInteraction={true}
-          hexAltitude={(d) => Math.min(0.1, d.sumWeight)}
-          hexTopColor={() => (themeMode === 'dark' ? saladPalette.midGreen : saladPalette.green)}
-          hexSideColor={() =>
-            themeMode === 'dark' ? saladPalette.midGreen : saladPalette.darkGreen
-          }
+          hexAltitude={hexAltitude}
+          hexTopColor={hexTopColor}
+          hexSideColor={hexSideColor}
           animateIn={false}
         />
       ) : (

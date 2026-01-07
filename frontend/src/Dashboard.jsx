@@ -552,7 +552,7 @@ export default function Dashboard() {
                 '7d': 'last 7 days',
                 '30d': 'last 30 days',
                 '90d': 'last 90 days',
-                'total': 'all time',
+                total: 'all time',
               };
               const periodLabel = periodLabels[globalTimeWindow] || globalTimeWindow;
               const totals = plansData.totals || {};
@@ -572,8 +572,8 @@ export default function Dashboard() {
                     },
                     {
                       value: totals.compute_hours ?? 0,
-                      unit: 'hours',
-                      label: `Compute time (${periodLabel})`,
+                      unit: 'hrs',
+                      label: `Hours of compute (${periodLabel})`,
                     },
                     {
                       value: totals.transactions ?? 0,
@@ -845,7 +845,7 @@ export default function Dashboard() {
                       trendWindow={globalTimeWindow}
                       setTrendWindow={() => {}}
                       trendData={transformTimeSeries(plansData.time_series, 'gpu_hours')}
-                      unit="hours"
+                      unit="GPU-hrs"
                       unitType="below"
                       isLoading={isLoading}
                     />
