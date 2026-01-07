@@ -1,27 +1,48 @@
-// Fast-loading hook for metrics bar totals
-function useStatsTotals(period = 'week', gpu = 'all') {
-  const [totals, setTotals] = useState(undefined);
-  useEffect(() => {
-    let cancelled = false;
-    fetch(`${import.meta.env.VITE_STATS_API_URL}/metrics/stats?period=${period}&gpu=${gpu}`)
-      .then((res) => (res.ok ? res.json() : Promise.reject('Failed to fetch stats totals')))
-      .then((data) => {
-        if (!cancelled) setTotals(data);
-      })
-      .catch((err) => {
-        console.error('Error loading stats totals:', err);
-        if (!cancelled) setTotals(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [period, gpu]);
-  return totals;
-}
 // Dashboard.jsx - Main dashboard component for Stats Salad
 // Uses Material-UI, Chart.jsx, react-globe.gl, and custom chart components
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
+
+// Hook for fetching plan metrics from the new /metrics/plans endpoint
+function usePlansMetrics(period = '7d') {
+  const [data, setData] = useState(undefined);
+  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setIsLoading(true);
+    fetch(`${import.meta.env.VITE_STATS_API_URL}/metrics/plans?period=${period}`)
+      .then((res) => (res.ok ? res.json() : Promise.reject('Failed to fetch plans metrics')))
+      .then((result) => {
+        if (!cancelled) {
+          setData(result);
+          setIsLoading(false);
+        }
+      })
+      .catch((err) => {
+        console.error('Error loading plans metrics:', err);
+        if (!cancelled) {
+          setData(null);
+          setIsLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [period]);
+
+  return { data, isLoading };
+}
+
+// Transform time_series to TrendChart format: [{x: timestamp, y: value}]
+function transformTimeSeries(timeSeries, metric) {
+  if (!timeSeries || !Array.isArray(timeSeries)) return [];
+  return timeSeries.map((point) => ({
+    x: new Date(point.timestamp).getTime(),
+    y: point[metric] || 0,
+  }));
+}
+
 import {
   Container,
   Typography,
@@ -214,14 +235,25 @@ export default function Dashboard() {
     return 'light';
   };
 
-  // Global time window state for all charts
-  const [globalTimeWindow, setGlobalTimeWindow] = useState('month');
-  // Loading state for time selector
-  const [isLoading, setIsLoading] = useState(false);
+  // Global time window state for all charts - now using plan periods, with persistence
+  const [globalTimeWindow, setGlobalTimeWindow] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('timeWindow');
+      if (saved && ['6h', '24h', '7d', '30d', '90d', 'total'].includes(saved)) {
+        return saved;
+      }
+    }
+    return '7d';
+  });
   // Track which time window button is loading
   const [loadingTimeWindow, setLoadingTimeWindow] = useState(null);
   // Theme mode state with persistence
   const [themeMode, setThemeMode] = useState(getInitialTheme);
+
+  // Save time window to localStorage when it changes
+  useEffect(() => {
+    localStorage.setItem('timeWindow', globalTimeWindow);
+  }, [globalTimeWindow]);
 
   // Save theme to localStorage when it changes
   useEffect(() => {
@@ -231,31 +263,15 @@ export default function Dashboard() {
   // Memoize theme so it only changes when themeMode changes
   const theme = useMemo(() => createAppTheme(themeMode), [themeMode]);
 
-  // Helper to fetch stats summary for the bottom section (trends)
-  function useStatsSummary(period = 'month', gpu = 'all') {
-    const [stats, setStats] = useState(null);
-    useEffect(() => {
-      setIsLoading(true);
-      fetch(`${import.meta.env.VITE_STATS_API_URL}/metrics/trends?period=${period}&gpu=${gpu}`)
-        .then((res) => (res.ok ? res.json() : Promise.reject('Failed to fetch stats')))
-        .then((data) => {
-          setStats(data);
-          setIsLoading(false);
-          setLoadingTimeWindow(null);
-        })
-        .catch((err) => {
-          console.error('Error loading stats summary:', err);
-          setStats(null);
-          setIsLoading(false);
-          setLoadingTimeWindow(null);
-        });
-    }, [period, gpu]);
-    return stats;
-  }
+  // Fetch plan metrics from the new endpoint
+  const { data: plansData, isLoading } = usePlansMetrics(globalTimeWindow);
 
-  // Fast totals for metrics bar
-  const statsTotals = useStatsTotals(globalTimeWindow, 'all');
-  const statsSummary = useStatsSummary(globalTimeWindow, 'all');
+  // Clear loading state when data arrives
+  useEffect(() => {
+    if (!isLoading) {
+      setLoadingTimeWindow(null);
+    }
+  }, [isLoading]);
   // State for geo node data
   const [geoData, setGeoData] = useState(undefined);
   // State for transactions data
@@ -294,35 +310,6 @@ export default function Dashboard() {
       cancelled = true;
     };
   }, []); // Only run on mount, not on time window change
-
-  // Helper function to transform backend data for stacked charts
-  const createStackedChartData = React.useCallback((statsSummary, fieldName) => {
-    const legendColors = ['#b2d530', '#9acc35', '#7bb82e', '#53a626', '#3d6b28', '#1f4f22'];
-    const raw = statsSummary?.[fieldName];
-    if (!raw || !raw.labels || !raw.datasets) {
-      return { labels: [], datasets: [] };
-    }
-    // Calculate frequency (sum of values) for each dataset
-    const datasetsWithFrequency = raw.datasets.map((ds, i) => {
-      const freq = Array.isArray(ds.data) ? ds.data.reduce((a, b) => a + Math.abs(b), 0) : 0;
-      return {
-        ...ds,
-        _frequency: freq,
-        _originalIndex: i,
-      };
-    });
-    // Sort datasets by frequency descending
-    const sortedDatasets = datasetsWithFrequency
-      .sort((a, b) => b._frequency - a._frequency)
-      .map((ds, i) => ({
-        ...ds,
-        backgroundColor: legendColors[i % legendColors.length],
-        borderColor: '#fff',
-        borderWidth: 1,
-        fill: true,
-      }));
-    return { labels: raw.labels, datasets: sortedDatasets };
-  }, []);
 
   return (
     <ThemeProvider theme={theme}>
@@ -451,10 +438,12 @@ export default function Dashboard() {
         </a>
         <Box sx={{ display: 'flex', gap: 1, mr: 3, alignItems: 'center' }}>
           {[
-            { key: 'day', label: '1d' },
-            { key: 'week', label: '7d' },
-            { key: 'two_weeks', label: '14d' },
-            { key: 'month', label: '31d' },
+            { key: '6h', label: '6h' },
+            { key: '24h', label: '24h' },
+            { key: '7d', label: '7d' },
+            { key: '30d', label: '30d' },
+            { key: '90d', label: '90d' },
+            { key: 'total', label: 'All' },
           ].map((opt) => (
             <button
               key={opt.key}
@@ -547,45 +536,47 @@ export default function Dashboard() {
           }}
         >
           {/* MetricsBar: summary metrics above network activity */}
-          {statsTotals === undefined ? (
+          {plansData === undefined ? (
             <Typography variant="body2" color="textSecondary">
               Loading metrics...
             </Typography>
-          ) : statsTotals === null ? (
+          ) : plansData === null ? (
             <Typography variant="body2" color="error">
               Failed to load metrics.
             </Typography>
           ) : (
             (() => {
-              const periodLabel =
-                globalTimeWindow === 'day'
-                  ? 'last day'
-                  : globalTimeWindow === 'week'
-                    ? 'last week'
-                    : globalTimeWindow === 'two_weeks'
-                      ? 'last two weeks'
-                      : 'last month';
+              const periodLabels = {
+                '6h': 'last 6 hours',
+                '24h': 'last 24 hours',
+                '7d': 'last 7 days',
+                '30d': 'last 30 days',
+                '90d': 'last 90 days',
+                'total': 'all time',
+              };
+              const periodLabel = periodLabels[globalTimeWindow] || globalTimeWindow;
+              const totals = plansData.totals || {};
               return (
                 <MetricsBar
-                  key={globalTimeWindow + '-' + Object.values(statsTotals).join('-')}
+                  key={globalTimeWindow + '-' + JSON.stringify(totals)}
                   metrics={[
                     {
-                      value: statsTotals.unique_node_count ?? 0,
+                      value: totals.active_nodes ?? 0,
                       unit: '',
                       label: `Active nodes (${periodLabel})`,
                     },
                     {
-                      value: statsTotals.total_invoice_amount ?? 0,
+                      value: totals.total_fees ?? 0,
                       unit: '$',
                       label: `Fees paid (${periodLabel})`,
                     },
                     {
-                      value: statsTotals.total_time_hours ?? 0,
+                      value: totals.compute_hours ?? 0,
                       unit: 'hours',
                       label: `Compute time (${periodLabel})`,
                     },
                     {
-                      value: statsTotals.total_transaction_count ?? 0,
+                      value: totals.transactions ?? 0,
                       unit: '',
                       label: `Transactions (${periodLabel})`,
                     },
@@ -703,7 +694,7 @@ export default function Dashboard() {
           <StyledPaper>
             <StyledHeading>Network Activity</StyledHeading>
             <Grid container spacing={3} justifyContent="center">
-              {statsSummary ? (
+              {plansData ? (
                 <>
                   <Grid size={{ xs: 12, sm: 6 }}>
                     <TrendChart
@@ -712,7 +703,7 @@ export default function Dashboard() {
                       description="Number of SaladCloud providers that ran workloads."
                       trendWindow={globalTimeWindow}
                       setTrendWindow={() => {}}
-                      trendData={statsSummary.unique_node_count || []}
+                      trendData={transformTimeSeries(plansData.time_series, 'active_nodes')}
                       unit=""
                       unitType="front"
                       isLoading={isLoading}
@@ -725,7 +716,7 @@ export default function Dashboard() {
                       description="Fees paid by customers for workloads running on SaladCloud."
                       trendWindow={globalTimeWindow}
                       setTrendWindow={() => {}}
-                      trendData={statsSummary.total_invoice_amount || []}
+                      trendData={transformTimeSeries(plansData.time_series, 'total_fees')}
                       unit="$"
                       unitType="front"
                       isLoading={isLoading}
@@ -739,7 +730,7 @@ export default function Dashboard() {
                       description="Time customer workloads ran on SaladCloud."
                       trendWindow={globalTimeWindow}
                       setTrendWindow={() => {}}
-                      trendData={statsSummary.total_time_hours || []}
+                      trendData={transformTimeSeries(plansData.time_series, 'compute_hours')}
                       unit="hours"
                       unitType="below"
                       isLoading={isLoading}
@@ -752,7 +743,7 @@ export default function Dashboard() {
                       description="Total number of compute transactions between customers and providers."
                       trendWindow={globalTimeWindow}
                       setTrendWindow={() => {}}
-                      trendData={statsSummary.total_transaction_count || []}
+                      trendData={transformTimeSeries(plansData.time_series, 'transactions')}
                       unit=""
                       unitType="below"
                       isLoading={isLoading}
@@ -770,7 +761,7 @@ export default function Dashboard() {
             {/* Compute Resources Usage Section */}
             <StyledHeading>Resource Usage</StyledHeading>
             <Grid container spacing={3} justifyContent="center">
-              {statsSummary ? (
+              {plansData ? (
                 <>
                   <Grid size={{ xs: 12, sm: 6 }}>
                     <TrendChart
@@ -779,7 +770,7 @@ export default function Dashboard() {
                       description="Aggregated RAM usage across all workloads and provider nodes."
                       trendWindow={globalTimeWindow}
                       setTrendWindow={() => {}}
-                      trendData={statsSummary.total_ram_hours || []}
+                      trendData={transformTimeSeries(plansData.time_series, 'ram_hours')}
                       unit="GB-hr"
                       unitType="below"
                       isLoading={isLoading}
@@ -792,88 +783,72 @@ export default function Dashboard() {
                       description="Aggregated vCPU usage across all workloads and provider nodes."
                       trendWindow={globalTimeWindow}
                       setTrendWindow={() => {}}
-                      trendData={statsSummary.total_cpu_hours || []}
+                      trendData={transformTimeSeries(plansData.time_series, 'core_hours')}
                       unit="CPU-hr"
                       unitType="below"
                       isLoading={isLoading}
                     />
                   </Grid>
                   <Grid size={{ xs: 12, sm: 6 }}>
-                    {(() => {
-                      const gpuData = createStackedChartData(statsSummary, 'gpu_unique_node_count');
-                      return (
-                        <StackedChart
-                          id="gpuStackedChart"
-                          title="GPUs Used by Model"
-                          description="Provider nodes running GPU workloads, by model."
-                          trendWindow={globalTimeWindow}
-                          setTrendWindow={() => {}}
-                          chartData={gpuData}
-                          labels={gpuData.labels}
-                          unit="nodes"
-                        />
-                      );
-                    })()}
+                    <StackedChart
+                      id="gpuStackedChart"
+                      title="GPUs Used by Model"
+                      description="Provider nodes running GPU workloads, by model."
+                      trendWindow={globalTimeWindow}
+                      setTrendWindow={() => {}}
+                      chartData={plansData.active_nodes_by_gpu_model_ts}
+                      labels={plansData.active_nodes_by_gpu_model_ts?.labels || []}
+                      unit="nodes"
+                    />
                   </Grid>
                   <Grid size={{ xs: 12, sm: 6 }}>
-                    {(() => {
-                      const gpuVramData = createStackedChartData(
-                        statsSummary,
-                        'vram_unique_node_count',
-                      );
-                      return (
-                        <StackedChart
-                          id="gpuStackedChartVram"
-                          title="GPUs Used by VRAM"
-                          description="Provider nodes running GPU workloads, by VRAM."
-                          trendWindow={globalTimeWindow}
-                          setTrendWindow={() => {}}
-                          chartData={gpuVramData}
-                          labels={gpuVramData.labels}
-                          unit="nodes"
-                        />
-                      );
-                    })()}
+                    <StackedChart
+                      id="gpuStackedChartVram"
+                      title="GPUs Used by VRAM"
+                      description="Provider nodes running GPU workloads, by VRAM."
+                      trendWindow={globalTimeWindow}
+                      setTrendWindow={() => {}}
+                      chartData={plansData.active_nodes_by_vram_ts}
+                      labels={plansData.active_nodes_by_vram_ts?.labels || []}
+                      unit="nodes"
+                    />
                   </Grid>
                   <Grid size={{ xs: 12, sm: 6 }}>
-                    {(() => {
-                      const gpuTimeData = createStackedChartData(
-                        statsSummary,
-                        'gpu_total_time_hours',
-                      );
-                      return (
-                        <StackedChart
-                          id="gpuStackedChartTime"
-                          title="GPUs Time by Model (hr)"
-                          description="Time GPU customer workloads were running on SaladCloud, by GPU."
-                          trendWindow={globalTimeWindow}
-                          setTrendWindow={() => {}}
-                          chartData={gpuTimeData}
-                          labels={gpuTimeData.labels}
-                          unit="hours"
-                        />
-                      );
-                    })()}
+                    <StackedChart
+                      id="gpuStackedChartTime"
+                      title="GPUs Time by Model (hr)"
+                      description="Time GPU customer workloads were running on SaladCloud, by GPU."
+                      trendWindow={globalTimeWindow}
+                      setTrendWindow={() => {}}
+                      chartData={plansData.gpu_hours_by_model_ts}
+                      labels={plansData.gpu_hours_by_model_ts?.labels || []}
+                      unit="hours"
+                    />
                   </Grid>
                   <Grid size={{ xs: 12, sm: 6 }}>
-                    {(() => {
-                      const gpuVramTimeData = createStackedChartData(
-                        statsSummary,
-                        'vram_total_time_hours',
-                      );
-                      return (
-                        <StackedChart
-                          id="gpuStackedChartVramTime"
-                          title="GPUs Time by VRAM (hr)"
-                          description="Time GPU customer workloads were running on SaladCloud, by VRAM."
-                          trendWindow={globalTimeWindow}
-                          setTrendWindow={() => {}}
-                          chartData={gpuVramTimeData}
-                          labels={gpuVramTimeData.labels}
-                          unit="hours"
-                        />
-                      );
-                    })()}
+                    <StackedChart
+                      id="gpuStackedChartVramTime"
+                      title="GPUs Time by VRAM (hr)"
+                      description="Time GPU customer workloads were running on SaladCloud, by VRAM."
+                      trendWindow={globalTimeWindow}
+                      setTrendWindow={() => {}}
+                      chartData={plansData.gpu_hours_by_vram_ts}
+                      labels={plansData.gpu_hours_by_vram_ts?.labels || []}
+                      unit="hours"
+                    />
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <TrendChart
+                      id="trend-gpu-hours"
+                      title="GPU Time (hr)"
+                      description="Total GPU compute hours across all workloads."
+                      trendWindow={globalTimeWindow}
+                      setTrendWindow={() => {}}
+                      trendData={transformTimeSeries(plansData.time_series, 'gpu_hours')}
+                      unit="hours"
+                      unitType="below"
+                      isLoading={isLoading}
+                    />
                   </Grid>
                 </>
               ) : (

@@ -4,6 +4,7 @@ import { config } from './config.js';
 import { initRedis } from './cache/redis.js';
 import { loadGpuClassNames } from './services/gpuClasses.js';
 import { registerRoutes } from './routes/index.js';
+import { startCacheWarmer } from './services/cacheWarmer.js';
 
 async function main() {
   const fastify = Fastify({
@@ -31,6 +32,9 @@ async function main() {
   try {
     await fastify.listen({ port: config.port, host: '0.0.0.0' });
     console.log(`Server running on http://0.0.0.0:${config.port}`);
+
+    // Start cache warmer after server is up
+    startCacheWarmer();
   } catch (err) {
     fastify.log.error(err);
     process.exit(1);

@@ -21,7 +21,18 @@ const timeLabels = {
   week: 'over the last week',
   two_weeks: 'over the last two weeks',
   month: 'over the last month',
+  // API period values
+  '6h': 'over the last 6 hours',
+  '24h': 'over the last 24 hours',
+  '7d': 'over the last 7 days',
+  '30d': 'over the last 30 days',
+  '90d': 'over the last 90 days',
+  total: 'all time',
 };
+
+// Check if time window uses hourly granularity (7d or less)
+const isHourlyGranularity = (window) =>
+  ['6h', '24h', '7d', 'day', 'week'].includes(window);
 
 // Format dates specifically for tooltips (more detailed)
 const formatTooltipDate = (timestamp, window) => {
@@ -66,6 +77,50 @@ const getTooltipConfig = (isDark, originalTimestamps, window) => ({
     },
   },
 });
+
+// Tooltip config for stacked charts - shows only the hovered series
+const getStackedTooltipConfig = (isDark, originalTimestamps, window, unit, legendColors) => ({
+  backgroundColor: isDark ? 'rgba(0,0,0,0.9)' : '#fff',
+  titleColor: isDark ? '#fff' : '#000',
+  bodyColor: isDark ? '#fff' : '#000',
+  borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)',
+  borderWidth: 1,
+  padding: 12,
+  usePointStyle: true,
+  pointStyle: 'circle',
+  boxPadding: 6,
+  callbacks: {
+    title: function (context) {
+      const index = context[0].dataIndex;
+      const timestamp = originalTimestamps[index];
+      return formatTooltipDate(timestamp, window);
+    },
+    label: function (context) {
+      const label = context.dataset.label || '';
+      const value = context.parsed.y;
+      const formattedValue =
+        unit === 'nodes' || unit === 'count'
+          ? Math.round(value).toLocaleString()
+          : value.toLocaleString(undefined, { maximumFractionDigits: 1 });
+      return ` ${label}: ${formattedValue} ${unit || ''}`;
+    },
+    labelColor: function (context) {
+      const color = legendColors[context.datasetIndex % legendColors.length];
+      return {
+        borderColor: color,
+        backgroundColor: color,
+        borderWidth: 2,
+        borderRadius: 2,
+      };
+    },
+  },
+});
+
+// Interaction config for stacked charts - show nearest single dataset
+const stackedInteractionConfig = {
+  mode: 'nearest',
+  intersect: false,
+};
 
 /**
  * TrendChart - Line chart for single series trends
@@ -176,7 +231,7 @@ export function TrendChart({
               offset: true,
               bounds: 'data',
               time: {
-                unit: trendWindow === 'day' ? 'hour' : 'day',
+                unit: isHourlyGranularity(trendWindow) ? 'hour' : 'day',
                 tooltipFormat: 'yyyy-MM-dd HH:mm',
                 displayFormats: {
                   hour: 'MMM d, HH:mm',
@@ -222,7 +277,7 @@ export function TrendChart({
       chart.options.scales.x.offset = true;
       chart.options.scales.x.bounds = 'data';
       chart.options.scales.x.time = {
-        unit: trendWindow === 'day' ? 'hour' : 'day',
+        unit: isHourlyGranularity(trendWindow) ? 'hour' : 'day',
         tooltipFormat: 'yyyy-MM-dd HH:mm',
         displayFormats: {
           hour: 'MMM d, HH:mm',
@@ -537,18 +592,24 @@ export function StackedChart({
     return paren ? result + ' ' + paren : result;
   }
 
-  // Use provided chartData, but convert to time scale format
+  // Use provided chartData, but convert to time scale format and apply colors
   React.useEffect(() => {
-    if (chartData && chartData.labels && chartData.datasets) {
-      // Convert each dataset's data to [{x, y}] objects for time scale
-      const datasets = chartData.datasets.map((ds) => ({
+    if (chartData && chartData.labels && chartData.datasets && chartData.datasets.length > 0) {
+      // Convert each dataset's data to [{x, y}] objects for time scale, and apply legend colors
+      const datasets = chartData.datasets.map((ds, idx) => ({
         ...ds,
         data: chartData.labels.map((label, i) => ({ x: label, y: ds.data[i] })),
+        backgroundColor: legendColors[idx % legendColors.length] + '80', // 50% opacity for fill
+        borderColor: legendColors[idx % legendColors.length],
+        borderWidth: 2,
+        fill: true,
+        tension: 0.3,
       }));
       setInternalChartData({ datasets });
       setCurrents(chartData.datasets.map((ds) => ds.data[ds.data.length - 1]));
     } else {
-      setInternalChartData(null);
+      // Empty state - create empty chart data structure
+      setInternalChartData({ datasets: [] });
       setCurrents([]);
     }
   }, [chartData]);
@@ -595,12 +656,9 @@ export function StackedChart({
     const yFormat = getYAxisFormat(yMax);
 
     if (!chartRef.current) {
-      if (
-        internalChartData &&
-        internalChartData.datasets &&
-        internalChartData.datasets.length > 0
-      ) {
-        const originalTimestamps = chartData.labels;
+      // Create chart even with empty data to show empty state
+      if (internalChartData) {
+        const originalTimestamps = chartData?.labels || [];
         chartRef.current = new Chart(ctx, {
           type: 'line',
           data: internalChartData,
@@ -613,7 +671,7 @@ export function StackedChart({
             plugins: {
               legend: { display: false },
               title: { display: false },
-              tooltip: getTooltipConfig(isDark, originalTimestamps, trendWindow),
+              tooltip: getStackedTooltipConfig(isDark, originalTimestamps, trendWindow, unit, legendColors),
             },
             elements: { point: { radius: 0, hoverRadius: 0, borderWidth: 0 } },
             scales: {
@@ -622,7 +680,7 @@ export function StackedChart({
                 offset: true,
                 bounds: 'data',
                 time: {
-                  unit: trendWindow === 'day' ? 'hour' : 'day',
+                  unit: isHourlyGranularity(trendWindow) ? 'hour' : 'day',
                   tooltipFormat: 'yyyy-MM-dd HH:mm',
                   displayFormats: {
                     hour: 'MMM d, HH:mm',
@@ -671,10 +729,7 @@ export function StackedChart({
                 },
               },
             },
-            interaction: {
-              mode: 'index',
-              intersect: false,
-            },
+            interaction: stackedInteractionConfig,
           },
         });
       }
@@ -686,7 +741,7 @@ export function StackedChart({
         chart.options.scales.x.offset = true;
         chart.options.scales.x.bounds = 'data';
         chart.options.scales.x.time = {
-          unit: trendWindow === 'day' ? 'hour' : 'day',
+          unit: isHourlyGranularity(trendWindow) ? 'hour' : 'day',
           tooltipFormat: 'yyyy-MM-dd HH:mm',
           displayFormats: {
             hour: 'MMM d, HH:mm',
@@ -731,10 +786,10 @@ export function StackedChart({
       chart.options.scales.y.ticks.color = getAxisColors(isDark).tick;
       // Update tooltip config with current theme and timestamps
       const originalTimestamps = chartData ? chartData.labels : [];
-      chart.options.plugins.tooltip = getTooltipConfig(isDark, originalTimestamps, trendWindow);
+      chart.options.plugins.tooltip = getStackedTooltipConfig(isDark, originalTimestamps, trendWindow, unit, legendColors);
       chart.update('none');
     }
-  }, [theme.palette.mode, chartData, trendWindow]);
+  }, [theme.palette.mode, chartData, trendWindow, unit]);
 
   return (
     <Box
@@ -810,7 +865,7 @@ export function StackedChart({
               variant="caption"
               sx={{ color: '#aaa', fontSize: '0.8rem', mb: 1, display: 'block' }}
             >
-              {trendWindow === 'day' ? 'last hour:' : 'last day:'}
+              {isHourlyGranularity(trendWindow) ? 'last hour:' : 'last day:'}
             </Typography>
             {currents.length > 0 && internalChartData && internalChartData.datasets
               ? (() => {
@@ -917,7 +972,7 @@ export function StackedChart({
             className="w-inline-block"
           >
             <Typography variant="caption" sx={{ color: '#aaa', fontSize: '0.8rem', mb: 1 }}>
-              {trendWindow === 'day' ? 'last hour' : 'last day'}
+              {isHourlyGranularity(trendWindow) ? 'last hour' : 'last day'}
             </Typography>
             <Box sx={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center' }}>
               {currents.length > 0 && internalChartData && internalChartData.datasets

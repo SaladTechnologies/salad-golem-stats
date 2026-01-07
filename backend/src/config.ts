@@ -23,7 +23,13 @@ export const config = {
     stats: parseInt(process.env.CACHE_TTL_STATS || '3600', 10),
     trends: parseInt(process.env.CACHE_TTL_TRENDS || '3600', 10),
     geo_counts: parseInt(process.env.CACHE_TTL_GEO || '86400', 10),
-    transactions: parseInt(process.env.CACHE_TTL_TRANSACTIONS || '60', 10)
+    transactions: parseInt(process.env.CACHE_TTL_TRANSACTIONS || '60', 10),
+    plan_stats: parseInt(process.env.CACHE_TTL_PLAN_STATS || '3600', 10),
+  },
+
+  cacheWarmer: {
+    enabled: process.env.CACHE_WARMER_ENABLED !== 'false', // Enabled by default
+    intervalRatio: parseFloat(process.env.CACHE_WARMER_INTERVAL_RATIO || '0.8'), // Warm at 80% of TTL
   },
 } as const;
 
