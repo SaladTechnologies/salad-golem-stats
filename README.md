@@ -157,6 +157,8 @@ cp frontend/.env.example frontend/.env
 | `CACHE_TTL_TRENDS` | `3600` | Trends endpoint cache TTL |
 | `CACHE_TTL_TRANSACTIONS` | `60` | Transactions endpoint cache TTL |
 | `CACHE_TTL_PLAN_STATS` | `3600` | Plan stats endpoint cache TTL |
+| `CACHE_WARMER_ENABLED` | `true` | Enable proactive cache warming |
+| `CACHE_WARMER_INTERVAL_RATIO` | `0.8` | Warm interval as ratio of TTL (0.8 = every 48 min for 1hr TTL) |
 
 ### Frontend (`frontend/.env`)
 

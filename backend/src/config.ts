@@ -26,6 +26,11 @@ export const config = {
     transactions: parseInt(process.env.CACHE_TTL_TRANSACTIONS || '60', 10),
     plan_stats: parseInt(process.env.CACHE_TTL_PLAN_STATS || '3600', 10),
   },
+
+  cacheWarmer: {
+    enabled: process.env.CACHE_WARMER_ENABLED !== 'false', // Enabled by default
+    intervalRatio: parseFloat(process.env.CACHE_WARMER_INTERVAL_RATIO || '0.8'), // Warm at 80% of TTL
+  },
 } as const;
 
 export type CacheKey = keyof typeof config.cacheTtl;
