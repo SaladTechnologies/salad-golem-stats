@@ -175,23 +175,6 @@ export async function getPlanStats(period: PlanPeriod): Promise<PlanStatsRespons
     WHERE start_at < $1
   `;
 
-  const [totalsResult, activeNodesResult] = await Promise.all([
-    query<TotalsRow>(totalsQuery, timeParams),
-    query<{ active_nodes: string }>(activeNodesQuery, timeParams),
-  ]);
-  const totalsRow = totalsResult[0];
-  const activeNodesRow = activeNodesResult[0];
-
-  const totals: PlanTotals = {
-    active_nodes: parseInt(activeNodesRow.active_nodes, 10) || 0,
-    total_fees: parseFloat(totalsRow.total_fees || '0'),
-    compute_hours: parseFloat(totalsRow.compute_hours || '0'),
-    transactions: parseInt(totalsRow.transactions, 10) || 0,
-    core_hours: parseFloat(totalsRow.core_hours || '0'),
-    ram_hours: parseFloat(totalsRow.ram_hours || '0'),
-    gpu_hours: parseFloat(totalsRow.gpu_hours || '0'),
-  };
-
   // 2. Get time series
   // All metrics use overlap logic - hours are distributed across buckets where jobs were running
   // overlap_hours = LEAST(stop_at, bucket_end) - GREATEST(start_at, bucket_start)
@@ -306,18 +289,6 @@ export async function getPlanStats(period: PlanPeriod): Promise<PlanStatsRespons
     ORDER BY bucket
   `;
 
-  const timeSeriesResult = await query<TimeSeriesRow>(timeSeriesQuery, timeParams);
-  const timeSeries: PlanDataPoint[] = timeSeriesResult.map((row) => ({
-    timestamp: row.bucket.toISOString(),
-    active_nodes: parseInt(row.active_nodes, 10) || 0,
-    total_fees: parseFloat(row.total_fees || '0'),
-    compute_hours: parseFloat(row.compute_hours || '0'),
-    transactions: parseInt(row.transactions, 10) || 0,
-    core_hours: parseFloat(row.core_hours || '0'),
-    ram_hours: parseFloat(row.ram_hours || '0'),
-    gpu_hours: parseFloat(row.gpu_hours || '0'),
-  }));
-
   // 3. Get GPU hours by model
   const gpuHoursByModelQuery = `
     SELECT
@@ -331,12 +302,6 @@ export async function getPlanStats(period: PlanPeriod): Promise<PlanStatsRespons
     ORDER BY value DESC
   `.replace(timeWhere, timeWhere.split('stop_at').join('np.stop_at'));
 
-  const gpuHoursByModelResult = await query<GpuGroupRow>(gpuHoursByModelQuery, timeParams);
-  const gpuHoursByModel: GroupedMetric[] = gpuHoursByModelResult.map((row) => ({
-    group: row.group_name,
-    value: parseFloat(row.value || '0'),
-  }));
-
   // 4. Get GPU hours by VRAM
   const gpuHoursByVramQuery = `
     SELECT
@@ -349,12 +314,6 @@ export async function getPlanStats(period: PlanPeriod): Promise<PlanStatsRespons
     GROUP BY gc.vram_gb
     ORDER BY gc.vram_gb
   `;
-
-  const gpuHoursByVramResult = await query<GpuGroupRow>(gpuHoursByVramQuery, timeParams);
-  const gpuHoursByVram: GroupedMetric[] = gpuHoursByVramResult.map((row) => ({
-    group: row.group_name,
-    value: parseFloat(row.value || '0'),
-  }));
 
   // 5. Get active nodes by GPU model (using overlap logic)
   const activeNodesByModelQuery = startMs
@@ -379,12 +338,6 @@ export async function getPlanStats(period: PlanPeriod): Promise<PlanStatsRespons
     ORDER BY value DESC
   `;
 
-  const activeNodesByModelResult = await query<GpuGroupRow>(activeNodesByModelQuery, timeParams);
-  const activeNodesByGpuModel: GroupedMetric[] = activeNodesByModelResult.map((row) => ({
-    group: row.group_name,
-    value: parseFloat(row.value || '0'),
-  }));
-
   // 6. Get active nodes by VRAM (using overlap logic)
   const activeNodesByVramQuery = startMs
     ? `
@@ -407,12 +360,6 @@ export async function getPlanStats(period: PlanPeriod): Promise<PlanStatsRespons
     GROUP BY gc.vram_gb
     ORDER BY gc.vram_gb NULLS FIRST
   `;
-
-  const activeNodesByVramResult = await query<GpuGroupRow>(activeNodesByVramQuery, timeParams);
-  const activeNodesByVram: GroupedMetric[] = activeNodesByVramResult.map((row) => ({
-    group: row.group_name,
-    value: parseFloat(row.value || '0'),
-  }));
 
   // 7. Get GPU hours by model TIME SERIES (for stacked charts) - uses overlap logic
   const gpuHoursByModelTsQuery = startMs
@@ -465,9 +412,6 @@ export async function getPlanStats(period: PlanPeriod): Promise<PlanStatsRespons
     GROUP BY b.bucket, gc.gpu_class_name
     ORDER BY b.bucket, value DESC
   `;
-
-  const gpuHoursByModelTsResult = await query<GpuTimeSeriesRow>(gpuHoursByModelTsQuery, timeParams);
-  const gpuHoursByModelTs = transformToGroupedTimeSeries(gpuHoursByModelTsResult, timeSeries);
 
   // 8. Get GPU hours by VRAM TIME SERIES - uses overlap logic
   const gpuHoursByVramTsQuery = startMs
@@ -523,9 +467,6 @@ export async function getPlanStats(period: PlanPeriod): Promise<PlanStatsRespons
     ORDER BY b.bucket, gc.vram_gb
   `;
 
-  const gpuHoursByVramTsResult = await query<GpuTimeSeriesRow>(gpuHoursByVramTsQuery, timeParams);
-  const gpuHoursByVramTs = transformToGroupedTimeSeries(gpuHoursByVramTsResult, timeSeries);
-
   // 9. Get active nodes by GPU model TIME SERIES - excludes non-GPU workloads
   // Uses overlap logic: count nodes running during each bucket
   const activeNodesByModelTsQuery = startMs
@@ -575,9 +516,6 @@ export async function getPlanStats(period: PlanPeriod): Promise<PlanStatsRespons
     HAVING COUNT(DISTINCT np.node_id) > 0
     ORDER BY b.bucket, value DESC
   `;
-
-  const activeNodesByModelTsResult = await query<GpuTimeSeriesRow>(activeNodesByModelTsQuery, timeParams);
-  const activeNodesByModelTs = transformToGroupedTimeSeries(activeNodesByModelTsResult, timeSeries);
 
   // 10. Get active nodes by VRAM TIME SERIES - excludes non-GPU workloads
   // Uses overlap logic: count nodes running during each bucket
@@ -635,7 +573,83 @@ export async function getPlanStats(period: PlanPeriod): Promise<PlanStatsRespons
     ORDER BY b.bucket, vg.vram_gb
   `;
 
-  const activeNodesByVramTsResult = await query<GpuTimeSeriesRow>(activeNodesByVramTsQuery, timeParams);
+  // Execute ALL queries in parallel for maximum efficiency
+  const [
+    totalsResult,
+    activeNodesResult,
+    timeSeriesResult,
+    gpuHoursByModelResult,
+    gpuHoursByVramResult,
+    activeNodesByModelResult,
+    activeNodesByVramResult,
+    gpuHoursByModelTsResult,
+    gpuHoursByVramTsResult,
+    activeNodesByModelTsResult,
+    activeNodesByVramTsResult,
+  ] = await Promise.all([
+    query<TotalsRow>(totalsQuery, timeParams),
+    query<{ active_nodes: string }>(activeNodesQuery, timeParams),
+    query<TimeSeriesRow>(timeSeriesQuery, timeParams),
+    query<GpuGroupRow>(gpuHoursByModelQuery, timeParams),
+    query<GpuGroupRow>(gpuHoursByVramQuery, timeParams),
+    query<GpuGroupRow>(activeNodesByModelQuery, timeParams),
+    query<GpuGroupRow>(activeNodesByVramQuery, timeParams),
+    query<GpuTimeSeriesRow>(gpuHoursByModelTsQuery, timeParams),
+    query<GpuTimeSeriesRow>(gpuHoursByVramTsQuery, timeParams),
+    query<GpuTimeSeriesRow>(activeNodesByModelTsQuery, timeParams),
+    query<GpuTimeSeriesRow>(activeNodesByVramTsQuery, timeParams),
+  ]);
+
+  // Process totals
+  const totalsRow = totalsResult[0];
+  const activeNodesRow = activeNodesResult[0];
+  const totals: PlanTotals = {
+    active_nodes: parseInt(activeNodesRow.active_nodes, 10) || 0,
+    total_fees: parseFloat(totalsRow.total_fees || '0'),
+    compute_hours: parseFloat(totalsRow.compute_hours || '0'),
+    transactions: parseInt(totalsRow.transactions, 10) || 0,
+    core_hours: parseFloat(totalsRow.core_hours || '0'),
+    ram_hours: parseFloat(totalsRow.ram_hours || '0'),
+    gpu_hours: parseFloat(totalsRow.gpu_hours || '0'),
+  };
+
+  // Process time series
+  const timeSeries: PlanDataPoint[] = timeSeriesResult.map((row) => ({
+    timestamp: row.bucket.toISOString(),
+    active_nodes: parseInt(row.active_nodes, 10) || 0,
+    total_fees: parseFloat(row.total_fees || '0'),
+    compute_hours: parseFloat(row.compute_hours || '0'),
+    transactions: parseInt(row.transactions, 10) || 0,
+    core_hours: parseFloat(row.core_hours || '0'),
+    ram_hours: parseFloat(row.ram_hours || '0'),
+    gpu_hours: parseFloat(row.gpu_hours || '0'),
+  }));
+
+  // Process grouped metrics
+  const gpuHoursByModel: GroupedMetric[] = gpuHoursByModelResult.map((row) => ({
+    group: row.group_name,
+    value: parseFloat(row.value || '0'),
+  }));
+
+  const gpuHoursByVram: GroupedMetric[] = gpuHoursByVramResult.map((row) => ({
+    group: row.group_name,
+    value: parseFloat(row.value || '0'),
+  }));
+
+  const activeNodesByGpuModel: GroupedMetric[] = activeNodesByModelResult.map((row) => ({
+    group: row.group_name,
+    value: parseFloat(row.value || '0'),
+  }));
+
+  const activeNodesByVram: GroupedMetric[] = activeNodesByVramResult.map((row) => ({
+    group: row.group_name,
+    value: parseFloat(row.value || '0'),
+  }));
+
+  // Process grouped time series (depends on timeSeries for bucket mapping)
+  const gpuHoursByModelTs = transformToGroupedTimeSeries(gpuHoursByModelTsResult, timeSeries);
+  const gpuHoursByVramTs = transformToGroupedTimeSeries(gpuHoursByVramTsResult, timeSeries);
+  const activeNodesByModelTs = transformToGroupedTimeSeries(activeNodesByModelTsResult, timeSeries);
   const activeNodesByVramTs = transformToGroupedTimeSeries(activeNodesByVramTsResult, timeSeries);
 
   return {
@@ -652,7 +666,6 @@ export async function getPlanStats(period: PlanPeriod): Promise<PlanStatsRespons
     active_nodes_by_gpu_model: activeNodesByGpuModel,
     active_nodes_by_vram: activeNodesByVram,
     time_series: timeSeries,
-    // Time series grouped by GPU model/VRAM (for stacked charts)
     gpu_hours_by_model_ts: gpuHoursByModelTs,
     gpu_hours_by_vram_ts: gpuHoursByVramTs,
     active_nodes_by_gpu_model_ts: activeNodesByModelTs,
