@@ -63,12 +63,6 @@ docker compose exec redis redis-cli FLUSHALL
 docker compose exec db psql -U devuser -d statsdb
 ```
 
-### Production Deployment
-
-```bash
-docker compose -f docker-compose.prod.yaml up -d --build
-```
-
 ## Project Structure
 
 ```
@@ -99,6 +93,7 @@ docker compose -f docker-compose.prod.yaml up -d --build
 
 | Endpoint | Description |
 |----------|-------------|
+| `GET /health` | Health check |
 | `GET /metrics/plans` | Plan metrics with time series |
 | `GET /metrics/geo_counts` | H3 hexagon-aggregated geo data |
 | `GET /metrics/transactions` | Paginated transaction records |

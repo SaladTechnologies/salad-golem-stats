@@ -25,6 +25,9 @@ async function main() {
   // Load GPU class names
   await loadGpuClassNames();
 
+  // Health check
+  fastify.get('/health', async () => ({ status: 'ok' }));
+
   // Register routes
   await registerRoutes(fastify);
 
