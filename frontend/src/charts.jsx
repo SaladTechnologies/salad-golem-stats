@@ -65,8 +65,7 @@ const getTooltipConfig = (isDark, originalTimestamps, window) => ({
   backgroundColor: isDark ? 'rgba(0,0,0,0.8)' : '#fff',
   titleColor: isDark ? '#fff' : '#000',
   bodyColor: isDark ? '#fff' : '#000',
-  usePointStyle: true,
-  pointStyle: 'circle',
+  displayColors: false, // Remove color swatch from tooltip
   callbacks: {
     title: function (context) {
       // Use original timestamp for custom formatting
