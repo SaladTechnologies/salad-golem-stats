@@ -102,7 +102,7 @@ function transformToGroupedTimeSeries(
   const groupTotals = new Map<string, number>();
 
   for (const row of rows) {
-    const ts = row.bucket.toISOString();
+    const ts = new Date(row.bucket.getTime() + (DATA_OFFSET_HOURS * 60 * 60 * 1000)).toISOString();
     const idx = timestampIndex.get(ts);
     if (idx === undefined) continue;
 
@@ -606,7 +606,7 @@ export async function getPlanStats(period: PlanPeriod): Promise<PlanStatsRespons
 
   // Process time series
   const timeSeries: PlanDataPoint[] = timeSeriesResult.map((row) => ({
-    timestamp: row.bucket.toISOString(),
+    timestamp: new Date(row.bucket.getTime() + (DATA_OFFSET_HOURS * 60 * 60 * 1000)).toISOString(),
     active_nodes: parseInt(row.active_nodes, 10) || 0,
     total_fees: parseFloat(row.total_fees || '0'),
     compute_hours: parseFloat(row.compute_hours || '0'),
