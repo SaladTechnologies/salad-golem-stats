@@ -57,7 +57,6 @@ function toEpochMs(date: Date): number {
 interface TotalsRow {
   total_fees: string | null;
   compute_hours: string | null;
-  transactions: string;
   core_hours: string | null;
   ram_hours: string | null;
   gpu_hours: string | null;
@@ -68,7 +67,6 @@ interface TimeSeriesRow {
   active_nodes: string;
   total_fees: string | null;
   compute_hours: string | null;
-  transactions: string;
   core_hours: string | null;
   ram_hours: string | null;
   gpu_hours: string | null;
@@ -145,12 +143,11 @@ export async function getPlanStats(period: PlanPeriod): Promise<PlanStatsRespons
 
   // 1. Get totals
   // Active nodes uses overlap logic: nodes running at any point during the range
-  // Other metrics use stop_at (attributed to when job finished)
+  // All metrics sum across jobs in the time range
   const totalsQuery = `
     SELECT
       COALESCE(SUM(invoice_amount), 0) as total_fees,
       COALESCE(SUM((stop_at - start_at) / 1000.0 / 3600.0), 0) as compute_hours,
-      COUNT(*) as transactions,
       COALESCE(SUM(cpu * (stop_at - start_at) / 1000.0 / 3600.0), 0) as core_hours,
       COALESCE(SUM(ram * (stop_at - start_at) / 1000.0 / 3600.0 / 1024.0), 0) as ram_hours,
       COALESCE(SUM(
@@ -208,6 +205,8 @@ export async function getPlanStats(period: PlanPeriod): Promise<PlanStatsRespons
         np.invoice_amount,
         np.start_at,
         np.stop_at,
+        -- Job duration in ms
+        GREATEST(1, np.stop_at - np.start_at) as job_duration_ms,
         -- Overlap duration in ms: min(stop, bucket_end) - max(start, bucket_start)
         GREATEST(0, LEAST(np.stop_at, b.bucket_end_ms) - GREATEST(np.start_at, b.bucket_start_ms)) as overlap_ms
       FROM buckets b
@@ -220,14 +219,9 @@ export async function getPlanStats(period: PlanPeriod): Promise<PlanStatsRespons
     SELECT
       bucket,
       COUNT(DISTINCT node_id) as active_nodes,
-      -- Fees: attributed to bucket where transaction completed (stop_at)
-      COALESCE(SUM(CASE WHEN stop_at >= bucket_start_ms AND stop_at < bucket_end_ms
-            THEN invoice_amount ELSE 0 END), 0) as total_fees,
-      -- Hours = overlap_ms converted to hours
+      -- Fees: distributed proportionally across job duration
+      COALESCE(SUM(invoice_amount * overlap_ms / job_duration_ms), 0) as total_fees,
       COALESCE(SUM(overlap_ms / ${msPerHour}.0), 0) as compute_hours,
-      -- Transactions: count jobs that ended in this bucket
-      COUNT(CASE WHEN stop_at >= bucket_start_ms AND stop_at < bucket_end_ms
-            THEN 1 END) as transactions,
       COALESCE(SUM(cpu * overlap_ms / ${msPerHour}.0), 0) as core_hours,
       COALESCE(SUM(ram * overlap_ms / ${msPerHour}.0 / 1024.0), 0) as ram_hours,
       COALESCE(SUM(
@@ -262,6 +256,7 @@ export async function getPlanStats(period: PlanPeriod): Promise<PlanStatsRespons
         np.invoice_amount,
         np.start_at,
         np.stop_at,
+        GREATEST(1, np.stop_at - np.start_at) as job_duration_ms,
         GREATEST(0, LEAST(np.stop_at, b.bucket_end_ms) - GREATEST(np.start_at, b.bucket_start_ms)) as overlap_ms
       FROM all_buckets b
       JOIN node_plan np ON
@@ -272,11 +267,8 @@ export async function getPlanStats(period: PlanPeriod): Promise<PlanStatsRespons
     SELECT
       bucket,
       COUNT(DISTINCT node_id) as active_nodes,
-      COALESCE(SUM(CASE WHEN stop_at >= bucket_start_ms AND stop_at < bucket_end_ms
-            THEN invoice_amount ELSE 0 END), 0) as total_fees,
+      COALESCE(SUM(invoice_amount * overlap_ms / job_duration_ms), 0) as total_fees,
       COALESCE(SUM(overlap_ms / ${msPerHour}.0), 0) as compute_hours,
-      COUNT(CASE WHEN stop_at >= bucket_start_ms AND stop_at < bucket_end_ms
-            THEN 1 END) as transactions,
       COALESCE(SUM(cpu * overlap_ms / ${msPerHour}.0), 0) as core_hours,
       COALESCE(SUM(ram * overlap_ms / ${msPerHour}.0 / 1024.0), 0) as ram_hours,
       COALESCE(SUM(
@@ -607,7 +599,6 @@ export async function getPlanStats(period: PlanPeriod): Promise<PlanStatsRespons
     active_nodes: parseInt(activeNodesRow.active_nodes, 10) || 0,
     total_fees: parseFloat(totalsRow.total_fees || '0'),
     compute_hours: parseFloat(totalsRow.compute_hours || '0'),
-    transactions: parseInt(totalsRow.transactions, 10) || 0,
     core_hours: parseFloat(totalsRow.core_hours || '0'),
     ram_hours: parseFloat(totalsRow.ram_hours || '0'),
     gpu_hours: parseFloat(totalsRow.gpu_hours || '0'),
@@ -619,7 +610,6 @@ export async function getPlanStats(period: PlanPeriod): Promise<PlanStatsRespons
     active_nodes: parseInt(row.active_nodes, 10) || 0,
     total_fees: parseFloat(row.total_fees || '0'),
     compute_hours: parseFloat(row.compute_hours || '0'),
-    transactions: parseInt(row.transactions, 10) || 0,
     core_hours: parseFloat(row.core_hours || '0'),
     ram_hours: parseFloat(row.ram_hours || '0'),
     gpu_hours: parseFloat(row.gpu_hours || '0'),

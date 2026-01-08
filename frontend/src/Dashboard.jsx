@@ -575,11 +575,6 @@ export default function Dashboard() {
                       unit: 'hrs',
                       label: `Hours of compute (${periodLabel})`,
                     },
-                    {
-                      value: totals.transactions ?? 0,
-                      unit: '',
-                      label: `Transactions (${periodLabel})`,
-                    },
                   ]}
                 />
               );
