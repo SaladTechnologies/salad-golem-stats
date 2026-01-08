@@ -591,7 +591,6 @@ export function StackedChart({
         borderColor: legendColors[idx % legendColors.length],
         borderWidth: 2,
         fill: true,
-        tension: 0.3,
       }));
       setInternalChartData({ datasets });
       setCurrents(chartData.datasets.map((ds) => ds.data[ds.data.length - 1]));
@@ -667,7 +666,7 @@ export function StackedChart({
                 legendColors,
               ),
             },
-            elements: { point: { radius: 0, hoverRadius: 0, borderWidth: 0 } },
+            elements: { point: { radius: 0, hoverRadius: 4, borderWidth: 2 } },
             scales: {
               x: {
                 type: 'time',
