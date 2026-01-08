@@ -67,7 +67,6 @@ docker compose exec db psql -U devuser -d statsdb
 
 ```
 ├── docker-compose.yaml       # Development (hot reload)
-├── docker-compose.prod.yaml  # Production (built images)
 ├── backend/                  # TypeScript/Node API (Fastify)
 │   ├── src/
 │   │   ├── index.ts          # App entry point
