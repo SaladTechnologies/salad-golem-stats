@@ -3,9 +3,7 @@
 Import SQLite plans.db tables directly into PostgreSQL.
 
 Tables imported:
-- json_import_file
 - node_plan
-- node_plan_job
 
 Usage:
     python import_plans_db.py [--clear]
@@ -50,40 +48,6 @@ def get_sqlite_conn():
         print(f"Error: SQLite database not found at {SQLITE_DB_PATH}")
         sys.exit(1)
     return sqlite3.connect(SQLITE_DB_PATH)
-
-
-def import_json_import_file(sqlite_conn, pg_conn):
-    """Import json_import_file table."""
-    print("Importing json_import_file...")
-
-    sqlite_cur = sqlite_conn.cursor()
-    sqlite_cur.execute("SELECT id, file_name FROM json_import_file")
-    rows = sqlite_cur.fetchall()
-
-    if not rows:
-        print("  No rows to import")
-        return
-
-    pg_cur = pg_conn.cursor()
-
-    # Use INSERT with explicit id to preserve foreign key references
-    execute_values(
-        pg_cur,
-        """
-        INSERT INTO json_import_file (id, file_name)
-        VALUES %s
-        ON CONFLICT (id) DO UPDATE SET file_name = EXCLUDED.file_name
-        """,
-        rows
-    )
-
-    # Update sequence to match max id
-    pg_cur.execute("""
-        SELECT setval('json_import_file_id_seq', (SELECT COALESCE(MAX(id), 1) FROM json_import_file))
-    """)
-
-    pg_conn.commit()
-    print(f"  Imported {len(rows)} rows")
 
 
 def import_node_plan(sqlite_conn, pg_conn):
@@ -143,44 +107,6 @@ def import_node_plan(sqlite_conn, pg_conn):
     print(f"  Imported {imported} rows")
 
 
-def import_node_plan_job(sqlite_conn, pg_conn):
-    """Import node_plan_job table in batches."""
-    print("Importing node_plan_job...")
-
-    sqlite_cur = sqlite_conn.cursor()
-    sqlite_cur.execute("SELECT COUNT(*) FROM node_plan_job")
-    total_rows = sqlite_cur.fetchone()[0]
-    print(f"  Total rows to import: {total_rows}")
-
-    pg_cur = pg_conn.cursor()
-    imported = 0
-
-    sqlite_cur.execute("""
-        SELECT node_plan_id, order_index, start_at, duration
-        FROM node_plan_job
-    """)
-
-    while True:
-        rows = sqlite_cur.fetchmany(BATCH_SIZE)
-        if not rows:
-            break
-
-        execute_values(
-            pg_cur,
-            """
-            INSERT INTO node_plan_job (node_plan_id, order_index, start_at, duration)
-            VALUES %s
-            """,
-            rows
-        )
-        pg_conn.commit()
-
-        imported += len(rows)
-        print(f"  Progress: {imported}/{total_rows} ({100*imported//total_rows}%)")
-
-    print(f"  Imported {imported} rows")
-
-
 def run_migration(pg_conn):
     """Run the migration to create tables if they don't exist."""
     migration_path = os.path.join(SCRIPT_DIR, "..", "db", "migrations", "002_plans_tables.sql")
@@ -200,10 +126,10 @@ def run_migration(pg_conn):
 
 
 def clear_tables(pg_conn):
-    """Truncate all plan tables (in reverse FK order)."""
+    """Truncate node_plan table."""
     print("Clearing existing data...")
     pg_cur = pg_conn.cursor()
-    pg_cur.execute("TRUNCATE node_plan_job, node_plan, json_import_file RESTART IDENTITY CASCADE")
+    pg_cur.execute("TRUNCATE node_plan RESTART IDENTITY CASCADE")
     pg_conn.commit()
     print("  Tables cleared")
 
@@ -235,10 +161,8 @@ def main():
         clear_tables(pg_conn)
         print()
 
-    # Import tables in order (respecting foreign keys)
-    import_json_import_file(sqlite_conn, pg_conn)
+    # Import node_plan table
     import_node_plan(sqlite_conn, pg_conn)
-    import_node_plan_job(sqlite_conn, pg_conn)
 
     # Close connections
     sqlite_conn.close()

@@ -310,7 +310,6 @@ def main(filter_is_running=False, filter_has_workload=False, filter_organization
             return None
 
     skipped_cities = []
-    skipped_countries = []
     with conn:
         with conn.cursor() as cur:
             for loc in output_rows_city:
@@ -330,32 +329,11 @@ def main(filter_is_running=False, filter_has_workload=False, filter_organization
                     )
                 else:
                     skipped_cities.append(loc)
-            for loc in output_rows_country:
-                lat = safe_float(loc["lat"])
-                lon = safe_float(loc["lon"])
-                if lat is not None and lon is not None:
-                    cur.execute(
-                        """
-                        INSERT INTO country_snapshots (ts, name, count, lat, long)
-                        VALUES (%s, %s, %s, %s, %s)
-                        ON CONFLICT (ts, name) DO UPDATE
-                        SET count = EXCLUDED.count,
-                            lat = EXCLUDED.lat,
-                            long = EXCLUDED.long
-                        """,
-                        (ts, loc["country"], loc["count"], lat, lon),
-                    )
-                else:
-                    skipped_countries.append(loc)
     conn.close()
 
     if skipped_cities:
         print("Skipped cities with missing coordinates:")
         for loc in skipped_cities:
-            print(loc)
-    if skipped_countries:
-        print("Skipped countries with missing coordinates:")
-        for loc in skipped_countries:
             print(loc)
 
 
