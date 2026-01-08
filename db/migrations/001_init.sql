@@ -1,39 +1,9 @@
 -- ===============================================
 -- 001_init.sql
--- Initial database schema for metrics dashboard
+-- Complete database schema for metrics dashboard
 -- ===============================================
 
-CREATE TABLE IF NOT EXISTS hourly_gpu_stats (
-    id SERIAL PRIMARY KEY,
-    hour TIMESTAMP NOT NULL,
-    gpu_group TEXT NOT NULL,
-    total_time_seconds DOUBLE PRECISION,
-    total_time_hours DOUBLE PRECISION,
-    total_invoice_amount DOUBLE PRECISION,
-    total_ram_hours DOUBLE PRECISION,
-    total_cpu_hours DOUBLE PRECISION,
-    total_transaction_count INTEGER
-);
-
-CREATE TABLE IF NOT EXISTS hourly_distinct_counts (
-    id SERIAL PRIMARY KEY,
-    hour TIMESTAMP NOT NULL,
-    gpu_group TEXT NOT NULL,
-    unique_node_count INTEGER,
-    unique_node_ram DOUBLE PRECISION,
-    unique_node_cpu DOUBLE PRECISION
-);
-
-CREATE TABLE IF NOT EXISTS daily_distinct_counts (
-    id SERIAL PRIMARY KEY,
-    day DATE NOT NULL,
-    gpu_group TEXT NOT NULL,
-    unique_node_count INTEGER,
-    unique_node_ram DOUBLE PRECISION,
-    unique_node_cpu DOUBLE PRECISION
-);
-
-
+-- Core reference tables
 CREATE TABLE IF NOT EXISTS gpu_classes (
     gpu_class_id TEXT PRIMARY KEY,
     batch_price DOUBLE PRECISION,
@@ -45,6 +15,7 @@ CREATE TABLE IF NOT EXISTS gpu_classes (
     vram_gb INTEGER
 );
 
+-- Geographic data
 CREATE TABLE IF NOT EXISTS city_snapshots (
     ts TIMESTAMP NOT NULL,
     name TEXT NOT NULL,
@@ -54,16 +25,7 @@ CREATE TABLE IF NOT EXISTS city_snapshots (
     PRIMARY KEY (ts, name)
 );
 
-CREATE TABLE IF NOT EXISTS country_snapshots (
-    ts TIMESTAMP NOT NULL,
-    name TEXT NOT NULL,
-    count INTEGER NOT NULL,
-    lat FLOAT NOT NULL,
-    long FLOAT NOT NULL,
-    PRIMARY KEY (ts, name)
-);
-
--- SQL to create the placeholder_transactions table for demo/test transactions
+-- Demo/test data
 CREATE TABLE IF NOT EXISTS placeholder_transactions (
     id SERIAL PRIMARY KEY,
     ts TIMESTAMP WITH TIME ZONE NOT NULL,
@@ -78,11 +40,36 @@ CREATE TABLE IF NOT EXISTS placeholder_transactions (
     invoiced_dollar DOUBLE PRECISION
 );
 
+-- Import tracking
+CREATE TABLE IF NOT EXISTS json_import_file (
+    id SERIAL PRIMARY KEY,
+    file_name TEXT UNIQUE NOT NULL
+);
 
--- Indexes for faster queries
-CREATE INDEX IF NOT EXISTS idx_hourly_gpu_stats_hour ON hourly_gpu_stats(hour);
-CREATE INDEX IF NOT EXISTS idx_hourly_distinct_counts_hour ON hourly_distinct_counts(hour);
-CREATE INDEX IF NOT EXISTS idx_daily_distinct_counts_day ON daily_distinct_counts(day);
+-- Main metrics data
+CREATE TABLE IF NOT EXISTS node_plan (
+    id SERIAL PRIMARY KEY,
+    org_name TEXT,
+    node_id TEXT,
+    json_import_file_id INTEGER REFERENCES json_import_file(id),
+    start_at BIGINT,
+    stop_at BIGINT,
+    invoice_amount DOUBLE PRECISION,
+    usd_per_hour DOUBLE PRECISION,
+    gpu_class_id TEXT,
+    ram DOUBLE PRECISION,
+    cpu DOUBLE PRECISION
+);
+
+-- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_gpu_classes_id ON gpu_classes(gpu_class_id);
 CREATE INDEX IF NOT EXISTS idx_placeholder_transactions_ts ON placeholder_transactions(ts DESC);
+CREATE INDEX IF NOT EXISTS idx_node_plan_org ON node_plan(org_name);
+CREATE INDEX IF NOT EXISTS idx_node_plan_node_id ON node_plan(node_id);
+CREATE INDEX IF NOT EXISTS idx_node_plan_gpu_class ON node_plan(gpu_class_id);
+CREATE INDEX IF NOT EXISTS idx_node_plan_stop_at ON node_plan(stop_at);
+CREATE INDEX IF NOT EXISTS idx_node_plan_start_at ON node_plan(start_at);
+CREATE INDEX IF NOT EXISTS idx_node_plan_time_range ON node_plan(stop_at, start_at);
+CREATE INDEX IF NOT EXISTS idx_node_plan_gpu_time ON node_plan(gpu_class_id, stop_at, start_at)
+WHERE gpu_class_id IS NOT NULL AND gpu_class_id != '';
 
