@@ -91,6 +91,7 @@ export interface PlanTotals {
   active_nodes: number;
   total_fees: number;
   compute_hours: number;
+  transactions: number;
   core_hours: number;
   ram_hours: number;
   gpu_hours: number;
@@ -102,6 +103,7 @@ export interface PlanDataPoint {
   active_nodes: number;
   total_fees: number;
   compute_hours: number;
+  transactions: number;
   core_hours: number;
   ram_hours: number;
   gpu_hours: number;
