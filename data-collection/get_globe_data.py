@@ -11,11 +11,12 @@ from dotenv import load_dotenv
 import psycopg2
 
 
-def main(filter_is_running=False, filter_has_workload=False, filter_organizations=[]):
-    # Load .env variables
-    load_dotenv()  # reads .env from current directory
+def get_database_connection():
+    """Initialize database connections"""
+    load_dotenv()
 
-    conn = psycopg2.connect(
+    # PostgreSQL connection
+    pg_conn = psycopg2.connect(
         dbname=os.getenv("POSTGRES_DB"),
         user=os.getenv("POSTGRES_USER"),
         password=os.getenv("POSTGRES_PASSWORD"),
@@ -23,38 +24,43 @@ def main(filter_is_running=False, filter_has_workload=False, filter_organization
         port=int(os.getenv("POSTGRES_PORT", 5432)),
     )
 
+    # MongoDB connection
     mongo_user = os.getenv("MONGOUSER")
     mongo_password = os.getenv("MONGOPASS")
     mongo_name = os.getenv("DBNAME")
     mongo_url = os.getenv("MONGO_URL")
 
-    def get_database(dbname=mongo_name):
+    connection_string = f"mongodb+srv://{mongo_user}:{mongo_password}@{mongo_url}/"
+    mongo_client = MongoClient(connection_string)
+    mongo_db = mongo_client[mongo_name]
 
-        CONNECTION_STRING = f"mongodb+srv://{mongo_user}:{mongo_password}@{mongo_url}/"
-        # Create a connection using MongoClient. You can import MongoClient or use pymongo.MongoClient
-        client = MongoClient(CONNECTION_STRING)
+    return pg_conn, mongo_db
 
-        return client[dbname]
 
-    ##################
-    # GET DATA
-    ##################
-    ts = (datetime.now(timezone.utc)).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+def get_node_data(
+    filter_is_running=False, filter_has_workload=False, filter_organizations=[]
+):
+    """Fetch and filter node data from MongoDB"""
+    _, mongo_db = get_database_connection()
 
     date_cutoff = (datetime.now(timezone.utc) - timedelta(hours=24)).strftime(
         "%Y-%m-%dT%H:%M:%S.%fZ"
     )
 
+    min_sel_ver_num = int(os.getenv("MIN_SEL", "2003009"))
     min_download = 10  # in Mbps
 
+    # Use datetime object for MongoDB comparison instead of string
+    date_cutoff_dt = datetime.now(timezone.utc) - timedelta(hours=24)
+
     node_query = {
-        "updated_at": {"$gt": {"DateTime": date_cutoff}},
+        "updated_at.DateTime": {"$gt": date_cutoff_dt},
         "sel_ver_num": {"$gte": min_sel_ver_num},
         "container_ready": True,
         "os_arch": "x64",
         "$or": [
             {
-                "ip": {"$gt": {"ndm_download": min_download}},
+                "ip.ndm_download": {"$gt": min_download},
             },
             {"is_datacenter": True},
         ],
@@ -79,14 +85,12 @@ def main(filter_is_running=False, filter_has_workload=False, filter_organization
         "instances.last_instance_state": 1,
     }
 
-    db = get_database()
-    collection = db["nodes"]
+    collection = mongo_db["nodes"]
     node_results = collection.find(node_query, node_projection)
+    node_list = list(node_results)
 
     if filter_organizations:
-
         workload_query = {}
-
         workload_projection = {
             "replica_count": 1,
             "min_disk": 1,
@@ -96,13 +100,11 @@ def main(filter_is_running=False, filter_has_workload=False, filter_organization
             "instances.status": 1,
             "workload_id": 1,
             "organization_name": 1,
-            "organization_id": 1,  # NEED TO TEST
+            "organization_id": 1,
         }
 
-        collection = db["workloads"]
+        collection = mongo_db["workloads"]
         workload_results = collection.find(workload_query, workload_projection)
-
-        node_list = list(node_results)
         workload_list = list(workload_results)
 
         # Create workload lookup by workload_id
@@ -118,8 +120,8 @@ def main(filter_is_running=False, filter_has_workload=False, filter_organization
         # Add organization info to nodes based on instances.workload_id
         for node in node_list:
             instances = node.get("instances", [])
-            node["instance_organization_names"] = set()
-            node["instance_organization_ids"] = set()
+            node["organization_names"] = set()
+            node["organization_ids"] = set()
 
             for instance in instances:
                 workload_id = instance.get("workload_id")
@@ -134,13 +136,10 @@ def main(filter_is_running=False, filter_has_workload=False, filter_organization
             node["organization_ids"] = list(node["organization_ids"])
             node["organization_names"] = list(node["organization_names"])
 
-    ##################
-    ### PROCESS DATA
-    ##################
-
-    # City and country counts
+    # Process and filter nodes
     city_counter = Counter()
     country_counter = Counter()
+
     for node in node_list:
         # Apply optional filters
         if filter_has_workload:
@@ -172,8 +171,11 @@ def main(filter_is_running=False, filter_has_workload=False, filter_organization
         if country:
             country_counter[country] += 1
 
-    # Process to lat / long
-    # Geocode cache file
+    return city_counter, country_counter
+
+
+def load_geocode_caches():
+    """Load existing geocode caches"""
     GEOCODE_CITY_CACHE_PATH = Path("./data/city_geocode_cache.json")
     if GEOCODE_CITY_CACHE_PATH.exists():
         with open(GEOCODE_CITY_CACHE_PATH, "r", encoding="utf-8") as f:
@@ -188,57 +190,68 @@ def main(filter_is_running=False, filter_has_workload=False, filter_organization
     else:
         geocode_country_cache = {}
 
-    def geocode_city(city_name):
-        if city_name in geocode_city_cache:
-            return geocode_city_cache[city_name]
-        if city_name == "N/A" or not city_name:
-            return None
-        # Use OpenStreetMap Nominatim API
-        url = f"https://nominatim.openstreetmap.org/search?city={city_name}&format=json&limit=1"
-        try:
-            resp = requests.get(url, headers={"User-Agent": "SaladCloudStats/1.0"})
-            if resp.status_code == 200:
-                data = resp.json()
-                if data:
-                    lat = float(data[0]["lat"])
-                    lon = float(data[0]["lon"])
-                    geocode_city_cache[city_name] = {"lat": lat, "lon": lon}
-                    time.sleep(2)  # Be polite to API
-                    return geocode_city_cache[city_name]
-        except Exception as e:
-            print(f"Geocoding error for {city_name}: {e}")
-        geocode_city_cache[city_name] = None
+    return geocode_city_cache, geocode_country_cache
+
+
+def geocode_city(city_name, geocode_city_cache):
+    """Geocode a city name using OpenStreetMap Nominatim API"""
+    if city_name in geocode_city_cache:
+        return geocode_city_cache[city_name]
+    if city_name == "N/A" or not city_name:
         return None
 
-    def geocode_country_code(country_code):
-        if country_code in geocode_country_cache:
-            return geocode_country_cache[country_code]
-        if country_code == "N/A" or not country_code:
-            return None
-        # Use OpenStreetMap Nominatim API
-        url = f"https://nominatim.openstreetmap.org/search?country={country_code}&format=json&limit=1"
-        try:
-            resp = requests.get(url, headers={"User-Agent": "SaladCloudStats/1.0"})
-            if resp.status_code == 200:
-                data = resp.json()
-                if data:
-                    lat = float(data[0]["lat"])
-                    lon = float(data[0]["lon"])
-                    geocode_country_cache[country_code] = {"lat": lat, "lon": lon}
-                    time.sleep(2)  # Be polite to API
-                    return geocode_country_cache[country_code]
-        except Exception as e:
-            print(f"Geocoding error for {country_code}: {e}")
-        geocode_country_cache[country_code] = None
+    url = f"https://nominatim.openstreetmap.org/search?city={city_name}&format=json&limit=1"
+    try:
+        resp = requests.get(url, headers={"User-Agent": "SaladCloudStats/1.0"})
+        if resp.status_code == 200:
+            data = resp.json()
+            if data:
+                lat = float(data[0]["lat"])
+                lon = float(data[0]["lon"])
+                geocode_city_cache[city_name] = {"lat": lat, "lon": lon}
+                time.sleep(2)  # Be polite to API
+                return geocode_city_cache[city_name]
+    except Exception as e:
+        print(f"Geocoding error for {city_name}: {e}")
+    geocode_city_cache[city_name] = None
+    return None
+
+
+def geocode_country_code(country_code, geocode_country_cache):
+    """Geocode a country code using OpenStreetMap Nominatim API"""
+    if country_code in geocode_country_cache:
+        return geocode_country_cache[country_code]
+    if country_code == "N/A" or not country_code:
         return None
 
-    # Prepare output with geocoding
+    url = f"https://nominatim.openstreetmap.org/search?country={country_code}&format=json&limit=1"
+    try:
+        resp = requests.get(url, headers={"User-Agent": "SaladCloudStats/1.0"})
+        if resp.status_code == 200:
+            data = resp.json()
+            if data:
+                lat = float(data[0]["lat"])
+                lon = float(data[0]["lon"])
+                geocode_country_cache[country_code] = {"lat": lat, "lon": lon}
+                time.sleep(2)  # Be polite to API
+                return geocode_country_cache[country_code]
+    except Exception as e:
+        print(f"Geocoding error for {country_code}: {e}")
+    geocode_country_cache[country_code] = None
+    return None
+
+
+def add_lat_long_to_data(city_counter, country_counter):
+    """Add latitude and longitude coordinates to location data"""
+    geocode_city_cache, geocode_country_cache = load_geocode_caches()
+
+    # Process cities
     output_rows_city = []
     total_cities = len(city_counter)
     print(f"Geocoding {total_cities} cities...")
     for idx, (city, count) in enumerate(city_counter.items(), 1):
         print(f"[{idx}/{total_cities}] Geocoding: {city}")
-        geo = geocode_city(city)
+        geo = geocode_city(city, geocode_city_cache)
         if geo:
             output_rows_city.append(
                 {"city": city, "count": count, "lat": geo["lat"], "lon": geo["lon"]}
@@ -249,12 +262,13 @@ def main(filter_is_running=False, filter_has_workload=False, filter_organization
             )
     print("City geocoding complete.")
 
+    # Process countries
     output_rows_country = []
     total_countries = len(country_counter)
     print(f"Geocoding {total_countries} countries...")
     for idx, (country, count) in enumerate(country_counter.items(), 1):
         print(f"[{idx}/{total_countries}] Geocoding: {country}")
-        geo = geocode_country_code(country)
+        geo = geocode_country_code(country, geocode_country_cache)
         if geo:
             output_rows_country.append(
                 {
@@ -271,26 +285,30 @@ def main(filter_is_running=False, filter_has_workload=False, filter_organization
     print("Country geocoding complete.")
 
     # Update geocode caches
+    GEOCODE_CITY_CACHE_PATH = Path("./data/city_geocode_cache.json")
+    GEOCODE_COUNTRY_CACHE_PATH = Path("./data/country_geocode_cache.json")
+
     with open(GEOCODE_CITY_CACHE_PATH, "w", encoding="utf-8") as f:
         json.dump(geocode_city_cache, f, ensure_ascii=False, indent=2)
 
     with open(GEOCODE_COUNTRY_CACHE_PATH, "w", encoding="utf-8") as f:
         json.dump(geocode_country_cache, f, ensure_ascii=False, indent=2)
 
-    ################################
-    # SAVE PROCESSED DATA
-    ################################
+    return output_rows_city, output_rows_country
 
-    # Write CSV with lat/lon
+
+def save_data_to_files(output_rows_city, output_rows_country):
+    """Save processed data to CSV files"""
+    # Write city CSV
     with open("./data/node_count_by_city.csv", "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=["city", "count", "lat", "lon"])
         writer.writeheader()
         for row in output_rows_city:
             writer.writerow({k: row.get(k, "") for k in writer.fieldnames})
 
-    # Save node count by country_code to a CSV file
+    # Write country CSV
     with open(
-        "node_count_by_country.csv", "w", newline="", encoding="utf-8"
+        "./data/node_count_by_country.csv", "w", newline="", encoding="utf-8"
     ) as f_country:
         writer = csv.DictWriter(
             f_country, fieldnames=["country", "count", "lat", "lon"]
@@ -299,9 +317,11 @@ def main(filter_is_running=False, filter_has_workload=False, filter_organization
         for row in output_rows_country:
             writer.writerow({k: row.get(k, "") for k in writer.fieldnames})
 
-    ######################
-    # to database
-    ######################
+
+def save_data_to_database(output_rows_city, output_rows_country):
+    """Save processed data to PostgreSQL database"""
+    pg_conn, _ = get_database_connection()
+    ts = (datetime.now(timezone.utc)).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
     def safe_float(val):
         try:
@@ -311,8 +331,16 @@ def main(filter_is_running=False, filter_has_workload=False, filter_organization
 
     skipped_cities = []
     skipped_countries = []
-    with conn:
-        with conn.cursor() as cur:
+
+    with pg_conn:
+        with pg_conn.cursor() as cur:
+            # Clear existing data from both tables
+            print("Clearing existing data from database tables...")
+            cur.execute("DELETE FROM city_snapshots")
+            cur.execute("DELETE FROM country_snapshots")
+            print("Database tables cleared.")
+            
+            # Insert city data
             for loc in output_rows_city:
                 lat = safe_float(loc["lat"])
                 lon = safe_float(loc["lon"])
@@ -330,6 +358,8 @@ def main(filter_is_running=False, filter_has_workload=False, filter_organization
                     )
                 else:
                     skipped_cities.append(loc)
+
+            # Insert country data
             for loc in output_rows_country:
                 lat = safe_float(loc["lat"])
                 lon = safe_float(loc["lon"])
@@ -347,7 +377,8 @@ def main(filter_is_running=False, filter_has_workload=False, filter_organization
                     )
                 else:
                     skipped_countries.append(loc)
-    conn.close()
+
+    pg_conn.close()
 
     if skipped_cities:
         print("Skipped cities with missing coordinates:")
@@ -359,6 +390,32 @@ def main(filter_is_running=False, filter_has_workload=False, filter_organization
             print(loc)
 
 
-if __name__ == "__main__":
+def main(filter_is_running=False, filter_has_workload=False, filter_organizations=[]):
+    """Main function that orchestrates the entire data processing pipeline"""
+    print("Starting globe data processing...")
 
+    # 1. Get the data
+    print("1. Fetching node data from MongoDB...")
+    city_counter, country_counter = get_node_data(
+        filter_is_running, filter_has_workload, filter_organizations
+    )
+
+    # 2. Add lat/long coordinates to the data
+    print("2. Adding latitude/longitude coordinates...")
+    output_rows_city, output_rows_country = add_lat_long_to_data(
+        city_counter, country_counter
+    )
+
+    # 3. Save the data to files
+    print("3. Saving data to CSV files...")
+    save_data_to_files(output_rows_city, output_rows_country)
+
+    # 4. Put the data in the database
+    print("4. Saving data to PostgreSQL database...")
+    save_data_to_database(output_rows_city, output_rows_country)
+
+    print("Globe data processing complete!")
+
+
+if __name__ == "__main__":
     main(filter_is_running=False, filter_has_workload=False, filter_organizations=[])
