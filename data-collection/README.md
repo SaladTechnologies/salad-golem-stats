@@ -40,7 +40,7 @@ The data collection system supports the dashboard by:
    STRAPIPW=your_strapi_password
 
    # Node filtering
-   MIN_SEL=2003009  # Minimum node selector version
+   MIN_SEL=2004000 minimum node selector version
    ```
 
 ## Scripts Documentation
@@ -87,13 +87,13 @@ Importing node_plan...
 
 ---
 
-### 2. `get_globe_data.py`
+### 2. `get_geo_data.py`
 
 **Purpose**: Fetches current node distribution data for the 3D globe visualization.
 
 **Usage**:
 ```bash
-python get_globe_data.py
+python get_geo_data.py
 ```
 
 **What it does**:
@@ -213,23 +213,21 @@ python import_gpu_classes.py input_file [--clear] [--dry-run]
 
 ### 6. `import_geo_data.py`
 
-**Purpose**: Imports geographic data from JSON backup files to PostgreSQL.
+**Purpose**: Simple tool to import city data from JSON backup files to PostgreSQL.
 
 **Usage**:
 ```bash
-python import_geo_data.py input_file [--clear] [--dry-run] [--tables table1,table2]
+python import_geo_data.py input_file [--clear]
 ```
 
 **Options**:
-- `--clear`: Truncate tables before import
-- `--dry-run`: Show what would be imported without actually doing it  
-- `--tables`: Import only specified tables
+- `--clear`: Clear existing city data before import
 
 **What it does**:
-- Loads geographic data from JSON export files
-- Supports city_snapshots and country_snapshots tables
-- Creates tables if they don't exist
-- Useful for environment synchronization and testing
+- Loads city data from JSON files (flexible format parsing)
+- Uses shared database functions for optimal performance
+- Bulk inserts for efficiency
+- Focused on city_snapshots table only
 
 ---
 
@@ -242,7 +240,7 @@ python import_geo_data.py input_file [--clear] [--dry-run] [--tables table1,tabl
 └─────────────────┘    └──────────────────┘    └─────────────────┘
                                                         │
 ┌─────────────────┐    ┌──────────────────┐           │
-│   MongoDB       │───▶│  get_globe_      │───────────┤
+│   MongoDB       │───▶│   get_geo_       │───────────┤
 │  (Node Data)    │    │     data.py      │           │
 └─────────────────┘    └──────────────────┘           │
                                                         │
@@ -268,7 +266,7 @@ python import_geo_data.py input_file [--clear] [--dry-run] [--tables table1,tabl
 
 ### Tables Populated by Scripts:
 
-- **`city_snapshots`**: Geographic node distribution (from `get_globe_data.py`)
+- **`city_snapshots`**: Geographic node distribution (from `get_geo_data.py`)
 - **`gpu_classes`**: GPU specifications (from `get_gpu_classes.py`) 
 - **`node_plan`**: Historical plan data (from `import_plans_db.py`)
 - **`node_plan_job`**: Job execution details (from `import_plans_db.py`)
@@ -301,13 +299,13 @@ python import_geo_data.py input_file [--clear] [--dry-run] [--tables table1,tabl
 ## Maintenance
 
 ### Regular Tasks:
-- Run `get_globe_data.py` hourly/daily for fresh node distribution
+- Run `get_geo_data.py` hourly/daily for fresh node distribution
 - Update `get_gpu_classes.py` when new GPU models are added
 - Re-import plans data when new historical data is available
 - Monitor geocoding cache size and performance
 
 ### Performance Optimization:
-- Geocoding cache significantly improves `get_globe_data.py` performance
+- Geocoding cache significantly improves `get_geo_data.py` performance
 - Batched imports in `import_plans_db.py` handle large datasets efficiently
 - Consider database indexing for frequently queried time ranges
 

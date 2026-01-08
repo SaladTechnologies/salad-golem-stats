@@ -27,7 +27,6 @@ backend/.env
 backend/__pycache__/main.cpython-313.pyc
 data-collection/node_count_by_country.csv
 data-collection/__pycache__/getdata.cpython-313.pyc
-data-collection/data/city_geocode_cache.json
 data-collection/data/country_geocode_cache.json
 data-collection/data/node_count_by_city.csv
 data-collection/data/node_count_by_country.csv
@@ -48,3 +47,6 @@ backend/venv
 
 # Claude Code
 .claude/
+data-collection/data/city_geocode_cache.json
+data-collection/__pycache__/shared_geo_db.cpython-313.pyc
+data-collection/data/city_data_export.json
