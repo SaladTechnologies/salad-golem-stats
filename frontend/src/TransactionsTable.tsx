@@ -459,6 +459,26 @@ export default function TransactionsTable() {
           </TableBody>
         </Table>
       </TableContainer>
+      <Typography
+        variant="caption"
+        sx={(theme) => ({
+          display: 'block',
+          textAlign: 'right',
+          mt: 1,
+          color: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)',
+        })}
+      >
+        Powered by{' '}
+        <a
+          href="https://etherscan.io"
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ color: 'inherit' }}
+        >
+          Etherscan.io
+        </a>{' '}
+        APIs
+      </Typography>
     </>
   );
 }
