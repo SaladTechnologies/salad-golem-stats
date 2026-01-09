@@ -47,27 +47,8 @@ done
 echo -e "${GREEN}Migrations applied.${NC}"
 echo ""
 
-# Step 4: Import plans.db data
-echo -e "${YELLOW}Step 4: Importing plans data from SQLite...${NC}"
-if [ -f "db/plans.db" ]; then
-    # Check if Python and dependencies are available
-    if command -v python3 &> /dev/null; then
-        cd data-collection
-        pip install -q psycopg2-binary python-dotenv 2>/dev/null || true
-        python3 import_plans_db.py --clear 2>&1 | tail -5
-        cd ..
-        echo -e "${GREEN}Plans data imported.${NC}"
-    else
-        echo -e "${YELLOW}Warning: Python3 not found. Skipping plans import.${NC}"
-        echo "  Run manually: cd data-collection && python import_plans_db.py --clear"
-    fi
-else
-    echo -e "${YELLOW}Warning: db/plans.db not found. Skipping plans import.${NC}"
-fi
-echo ""
-
-# Step 5: Clear Redis cache
-echo -e "${YELLOW}Step 5: Clearing Redis cache...${NC}"
+# Step 4: Clear Redis cache
+echo -e "${YELLOW}Step 4: Clearing Redis cache...${NC}"
 docker compose exec -T redis redis-cli FLUSHALL > /dev/null 2>&1 || true
 echo -e "${GREEN}Cache cleared.${NC}"
 echo ""
@@ -77,15 +58,16 @@ echo -e "${GREEN}Setup complete!${NC}"
 echo "========================================"
 echo ""
 echo "Services running:"
-echo "  Frontend: http://localhost:5173"
-echo "  Backend:  http://localhost:8000"
-echo "  Postgres: localhost:5432"
-echo "  Redis:    localhost:6379"
+echo "  Frontend:      http://localhost:5173"
+echo "  Backend:       http://localhost:8000"
+echo "  Postgres:      localhost:5432"
+echo "  Redis:         localhost:6379"
+echo "  Plan Importer: Running (imports from MixPanel every 6 hours)"
 echo ""
 echo "To populate additional data, run:"
 echo "  cd data-collection"
 echo "  python get_gpu_classes.py            # GPU class reference data"
-echo "  python get_globe_data.py             # City geo snapshots"
+echo "  python get_geo_data.py               # City geo snapshots"
 echo "  python generate_placeholder_transactions.py  # Demo transactions"
 echo ""
 echo "To view logs: docker compose logs -f"

@@ -1,6 +1,6 @@
 # Salad Stats Dashboard
 
-A dashboard for visualizing network statistics for SaladCloud's testing on the Golem Network. It includes a React frontend, a TypeScript/Node backend, PostgreSQL database, and Redis caching.
+A dashboard for visualizing network statistics for SaladCloud's testing on the Golem Network. It includes a React frontend, a TypeScript/Node backend, PostgreSQL database, Redis caching, and a plan importer service for ingesting data from MixPanel.
 
 ## Getting Started
 
@@ -19,14 +19,16 @@ Run the setup script to start all services and load data:
 This will:
 1. Start all Docker services
 2. Apply all database migrations
-3. Import plans data from `db/plans.db`
-4. Clear the Redis cache
+3. Clear the Redis cache
+
+The plan-importer service will automatically fetch and import plan data from MixPanel on startup and every 6 hours.
 
 Services will be available at:
 - **Frontend:** http://localhost:5173
 - **Backend:** http://localhost:8000
 - **PostgreSQL:** localhost:5432
 - **Redis:** localhost:6379
+- **Plan Importer:** Runs in background, importing data every 6 hours
 
 ### Manual Setup
 
@@ -40,11 +42,6 @@ docker compose up -d --build
 for f in db/migrations/*.sql; do
   docker compose exec db psql -U devuser -d statsdb -f "/data/migrations/$(basename $f)"
 done
-
-# Import plans data (requires Python)
-cd data-collection
-pip install psycopg2-binary python-dotenv
-python import_plans_db.py --clear
 ```
 
 ### Common Commands
@@ -82,6 +79,17 @@ docker compose exec db psql -U devuser -d statsdb
 │   ├── src/
 │   ├── Dockerfile
 │   ├── nginx.conf            # Production nginx config
+│   └── package.json
+├── plan-importer/            # MixPanel to PostgreSQL importer
+│   ├── src/
+│   │   ├── index.ts          # Service entry point
+│   │   ├── config.ts         # Environment configuration
+│   │   ├── mixpanel.ts       # MixPanel JQL API client
+│   │   ├── planner.ts        # PostgreSQL import logic
+│   │   ├── db.ts             # Database connection
+│   │   └── logger.ts         # Pino logger
+│   ├── jql/                  # MixPanel JQL query files
+│   ├── Dockerfile
 │   └── package.json
 ├── db/
 │   └── migrations/           # SQL migration files
@@ -122,6 +130,7 @@ Each service has its own `.env` file. Copy the example files to get started:
 ```bash
 cp backend/.env.example backend/.env
 cp frontend/.env.example frontend/.env
+cp plan-importer/.env.example plan-importer/.env
 ```
 
 ### Backend (`backend/.env`)
@@ -150,6 +159,20 @@ cp frontend/.env.example frontend/.env
 | `VITE_STATS_API_URL` | `http://localhost:8000` | Backend API URL |
 
 > **Note:** When running with Docker Compose, the `POSTGRES_HOST` and `REDIS_HOST` values are automatically overridden to use container networking (`db` and `redis` respectively).
+
+### Plan Importer (`plan-importer/.env`)
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `POSTGRES_HOST` | `localhost` | Database host |
+| `POSTGRES_PORT` | `5432` | Database port |
+| `POSTGRES_DB` | `statsdb` | Database name |
+| `POSTGRES_USER` | `devuser` | Database user |
+| `POSTGRES_PASSWORD` | `devpass` | Database password |
+| `MIXPANEL_API_KEY` | (required) | MixPanel API key for JQL queries |
+| `DATA_DIRECTORY` | `./data` | Directory for JSON file staging |
+| `MINIMUM_DURATION` | `600000` | Minimum plan duration in ms (10 min) |
+| `IMPORT_INTERVAL` | `21600000` | Import interval in ms (6 hours) |
 
 ### Data Collection (`data-collection/.env`)
 
