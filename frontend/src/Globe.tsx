@@ -1,6 +1,7 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import Globe from 'react-globe.gl';
 import * as THREE from 'three';
+import type { Theme } from '@mui/material';
 
 // Custom color palette (subset needed for globe)
 const saladPalette = {
@@ -9,33 +10,65 @@ const saladPalette = {
   midGreen: 'rgb(120,200,60)',
 };
 
-function GlobeComponent({ theme, themeMode, geoData }) {
+export interface GeoDataPoint {
+  lat: number;
+  lng: number;
+  normalized?: number;
+  sumWeight?: number;
+}
+
+export interface GeoData {
+  data: GeoDataPoint[];
+  resolution?: number;
+}
+
+export interface GlobeView {
+  lat: number;
+  lng: number;
+  altitude: number;
+}
+
+export interface GlobeComponentProps {
+  theme: Theme | null;
+  themeMode: 'light' | 'dark';
+  geoData: GeoData | null | undefined;
+}
+
+interface GlobeRef {
+  pointOfView: (view?: GlobeView, transitionDuration?: number) => GlobeView;
+  scene: () => THREE.Scene;
+}
+
+function GlobeComponent({ theme, themeMode, geoData }: GlobeComponentProps) {
   if (!theme) {
     return null; // Don't render if theme is not available yet
   }
-  const globeContainerRef = useRef(null);
-  const globeNetworkRef = useRef();
+  const globeContainerRef = useRef<HTMLDivElement>(null);
+  const globeNetworkRef = useRef<GlobeRef>(null);
 
   // Memoize color functions to prevent recreation on every render
-  const hexTopColor = React.useMemo(
+  const hexTopColor = useMemo(
     () => () => (themeMode === 'dark' ? saladPalette.midGreen : saladPalette.green),
     [themeMode],
   );
 
-  const hexSideColor = React.useMemo(
+  const hexSideColor = useMemo(
     () => () => (themeMode === 'dark' ? saladPalette.midGreen : saladPalette.darkGreen),
     [themeMode],
   );
 
   // Memoize hexAltitude function
-  const hexAltitude = React.useMemo(() => (d) => Math.min(0.1, d.sumWeight), []);
+  const hexAltitude = useMemo(
+    () => (d: { sumWeight?: number }) => Math.min(0.1, d.sumWeight || 0),
+    [],
+  );
 
   // --- Globe View Persistence ---
-  const getInitialGlobeView = () => {
+  const getInitialGlobeView = (): GlobeView => {
     try {
       const saved = localStorage.getItem('globeView');
       if (saved) {
-        return JSON.parse(saved);
+        return JSON.parse(saved) as GlobeView;
       }
     } catch (e) {
       console.error('Failed to parse globe view from localStorage', e);
@@ -44,10 +77,10 @@ function GlobeComponent({ theme, themeMode, geoData }) {
     return { lat: 20, lng: 0, altitude: 1.7 };
   };
 
-  const [globeView, setGlobeView] = useState(getInitialGlobeView);
+  const [globeView, setGlobeView] = useState<GlobeView>(getInitialGlobeView);
 
   // Update globe view state without writing to localStorage
-  const handleGlobeViewChange = (view) => {
+  const handleGlobeViewChange = (view: GlobeView) => {
     setGlobeView(view);
   };
 
@@ -58,8 +91,10 @@ function GlobeComponent({ theme, themeMode, geoData }) {
 
     const saveView = () => {
       try {
-        const currentView = globeNetworkRef.current.pointOfView();
-        localStorage.setItem('globeView', JSON.stringify(currentView));
+        const currentView = globeNetworkRef.current?.pointOfView();
+        if (currentView) {
+          localStorage.setItem('globeView', JSON.stringify(currentView));
+        }
       } catch (e) {
         console.error('Failed to save globe view:', e);
       }
@@ -98,7 +133,7 @@ function GlobeComponent({ theme, themeMode, geoData }) {
       geoData.data.length > 0 &&
       geoData.data.every((d) => d.lat && d.lng) ? (
         <Globe
-          ref={globeNetworkRef}
+          ref={globeNetworkRef as React.RefObject<GlobeRef>}
           width={480}
           height={400}
           globeImageUrl={themeMode === 'dark' ? '/earth-night.jpg' : '/earth-light.jpg'}
@@ -139,7 +174,7 @@ function GlobeComponent({ theme, themeMode, geoData }) {
 }
 
 // Custom comparison: only re-render if geoData, theme, or themeMode change
-function areEqual(prevProps, nextProps) {
+function areEqual(prevProps: GlobeComponentProps, nextProps: GlobeComponentProps): boolean {
   if (prevProps.themeMode !== nextProps.themeMode) return false;
   if (prevProps.theme !== nextProps.theme) return false;
   if (prevProps.geoData !== nextProps.geoData) return false;
