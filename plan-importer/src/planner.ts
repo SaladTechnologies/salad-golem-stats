@@ -56,7 +56,7 @@ export async function importPlans(): Promise<void> {
       const fileContent = await fs.readFile(jsonFilePath, 'utf-8');
       jsonData = JSON.parse(fileContent);
     } catch (err) {
-      logger.error(`Failed to parse JSON in ${jsonFile}:`, err);
+      logger.error({ err }, `Failed to parse JSON in ${jsonFile}`);
       await fs.rename(jsonFilePath, path.join(failedDir, jsonFile));
       continue;
     }
@@ -121,7 +121,7 @@ export async function importPlans(): Promise<void> {
       await fs.rename(jsonFilePath, path.join(importedDir, jsonFile));
     } catch (err) {
       await client.query('ROLLBACK');
-      logger.error(`Error importing ${jsonFile}:`, err);
+      logger.error({ err }, `Error importing ${jsonFile}`);
 
       // Move to failed folder
       await fs.rename(jsonFilePath, path.join(failedDir, jsonFile));

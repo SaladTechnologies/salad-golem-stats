@@ -27,7 +27,7 @@ async function runImportCycle(): Promise<void> {
     // Import plans to PostgreSQL
     await importPlans();
   } catch (error) {
-    logger.error('Error during import cycle:', error);
+    logger.error({ err: error }, 'Error during import cycle');
   }
 }
 

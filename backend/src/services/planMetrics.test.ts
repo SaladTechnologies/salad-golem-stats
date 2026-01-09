@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { PlanPeriod } from '../types/index.js';
 
 // Mock the database module before importing the service
@@ -279,11 +279,12 @@ describe('planMetrics service', () => {
       const [, params] = totalsCall;
 
       // Should have 2 params: cutoff and start
+      expect(params).toBeDefined();
       expect(params).toHaveLength(2);
 
       // Verify the difference is 6 hours (6 * 60 * 60 * 1000 ms)
-      const cutoffMs = params[0] as number;
-      const startMs = params[1] as number;
+      const cutoffMs = params![0] as number;
+      const startMs = params![1] as number;
       const sixHoursMs = 6 * 60 * 60 * 1000;
 
       expect(cutoffMs - startMs).toBe(sixHoursMs);
