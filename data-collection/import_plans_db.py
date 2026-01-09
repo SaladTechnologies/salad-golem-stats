@@ -62,11 +62,13 @@ def import_node_plan(sqlite_conn, pg_conn):
     pg_cur = pg_conn.cursor()
     imported = 0
 
-    sqlite_cur.execute("""
+    sqlite_cur.execute(
+        """
         SELECT id, org_name, node_id, json_import_file_id, start_at, stop_at,
                invoice_amount, usd_per_hour, gpu_class_id, ram, cpu
         FROM node_plan
-    """)
+    """
+    )
 
     while True:
         rows = sqlite_cur.fetchmany(BATCH_SIZE)
@@ -91,7 +93,7 @@ def import_node_plan(sqlite_conn, pg_conn):
                 ram = EXCLUDED.ram,
                 cpu = EXCLUDED.cpu
             """,
-            rows
+            rows,
         )
         pg_conn.commit()
 
@@ -99,9 +101,11 @@ def import_node_plan(sqlite_conn, pg_conn):
         print(f"  Progress: {imported}/{total_rows} ({100*imported//total_rows}%)")
 
     # Update sequence
-    pg_cur.execute("""
+    pg_cur.execute(
+        """
         SELECT setval('node_plan_id_seq', (SELECT COALESCE(MAX(id), 1) FROM node_plan))
-    """)
+    """
+    )
     pg_conn.commit()
 
     print(f"  Imported {imported} rows")
@@ -109,14 +113,14 @@ def import_node_plan(sqlite_conn, pg_conn):
 
 def run_migration(pg_conn):
     """Run the migration to create tables if they don't exist."""
-    migration_path = os.path.join(SCRIPT_DIR, "..", "db", "migrations", "002_plans_tables.sql")
+    migration_path = os.path.join(SCRIPT_DIR, "..", "db", "migrations", "001_init.sql")
 
     if not os.path.isfile(migration_path):
         print(f"Warning: Migration file not found at {migration_path}")
         return
 
-    print("Running migration 002_plans_tables.sql...")
-    with open(migration_path, 'r') as f:
+    print("Running migration 001_init.sql...")
+    with open(migration_path, "r") as f:
         sql = f.read()
 
     pg_cur = pg_conn.cursor()
@@ -136,7 +140,9 @@ def clear_tables(pg_conn):
 
 def main():
     parser = argparse.ArgumentParser(description="Import SQLite plans.db to PostgreSQL")
-    parser.add_argument("--clear", action="store_true", help="Clear existing tables before import")
+    parser.add_argument(
+        "--clear", action="store_true", help="Clear existing tables before import"
+    )
     args = parser.parse_args()
 
     print("=" * 50)
