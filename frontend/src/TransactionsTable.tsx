@@ -1,8 +1,14 @@
-import React from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useTheme } from '@mui/material';
 import ArrowDropUpIcon from '@mui/icons-material/ArrowDropUp';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
-import { useReactTable, getCoreRowModel, flexRender } from '@tanstack/react-table';
+import {
+  useReactTable,
+  getCoreRowModel,
+  flexRender,
+  ColumnDef,
+  CellContext,
+} from '@tanstack/react-table';
 import {
   Paper,
   Table,
@@ -13,53 +19,81 @@ import {
   TableRow,
   Typography,
   Divider,
+  Box,
+  Button,
+  Select,
+  MenuItem,
+  SelectChangeEvent,
 } from '@mui/material';
 
-import { Box, Button, Select, MenuItem } from '@mui/material';
+export interface Transaction {
+  ts?: string;
+  provider_wallet?: string;
+  requester_wallet?: string;
+  tx?: string;
+  invoiced_glm?: number;
+  invoiced_dollar?: number;
+}
+
+interface SortableHeaderProps {
+  label: string;
+  sortKey: string;
+  sortBy: string;
+  sortOrder: 'asc' | 'desc';
+  setSortBy: (key: string) => void;
+  setSortOrder: (order: 'asc' | 'desc') => void;
+}
+
+interface FetchOptions {
+  pageSize?: number;
+  cursor?: string | null;
+  direction?: 'next' | 'prev';
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
+}
+
+interface TransactionsResponse {
+  transactions?: Transaction[];
+  next_cursor?: string | null;
+  prev_cursor?: string | null;
+  total?: number;
+}
 
 export default function TransactionsTable() {
   // Pagination and sorting state for cursor-based API
-  const [pageSize, setPageSize] = React.useState(10);
-  const [transactions, setTransactions] = React.useState([]);
-  const [nextCursor, setNextCursor] = React.useState(null);
-  const [prevCursor, setPrevCursor] = React.useState(null);
-  const [currentCursor, setCurrentCursor] = React.useState(null);
-  const [direction, setDirection] = React.useState('next');
-  const [totalRows, setTotalRows] = React.useState(0);
-  const [loading, setLoading] = React.useState(false);
-  const [sortBy, setSortBy] = React.useState('time');
-  const [sortOrder, setSortOrder] = React.useState('desc');
+  const [pageSize, setPageSize] = useState(10);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [prevCursor, setPrevCursor] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [sortBy, setSortBy] = useState('time');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
   // Fetch transactions from backend
-  const fetchTransactions = React.useCallback(
-    (opts = {}) => {
+  const fetchTransactions = useCallback(
+    (opts: FetchOptions = {}) => {
       setLoading(true);
       const params = new URLSearchParams();
-      params.append('limit', opts.pageSize ?? pageSize);
+      params.append('limit', String(opts.pageSize ?? pageSize));
       if (opts.cursor) params.append('cursor', opts.cursor);
       if (opts.direction) params.append('direction', opts.direction);
       params.append('sort_by', opts.sortBy ?? sortBy);
       params.append('sort_order', opts.sortOrder ?? sortOrder);
       fetch(`${import.meta.env.VITE_STATS_API_URL}/metrics/transactions?${params.toString()}`)
-        .then((res) => (res.ok ? res.json() : Promise.reject('Failed to fetch transactions')))
+        .then((res) =>
+          res.ok ? (res.json() as Promise<TransactionsResponse>) : Promise.reject('Failed to fetch transactions'),
+        )
         .then((data) => {
           if (data.transactions && data.transactions.length > 0) {
             setTransactions(data.transactions);
             setNextCursor(data.next_cursor || null);
             setPrevCursor(data.prev_cursor || null);
-            setTotalRows(data.total || 0);
-            setCurrentCursor(opts.cursor || null);
-            setDirection(opts.direction || 'next');
-          } else {
-            // Optionally, show a message or flash a warning here
-            // Do not update state, so user stays on last valid page
           }
         })
-        .catch((err) => {
+        .catch(() => {
           setTransactions([]);
           setNextCursor(null);
           setPrevCursor(null);
-          setTotalRows(0);
         })
         .finally(() => setLoading(false));
     },
@@ -67,103 +101,19 @@ export default function TransactionsTable() {
   );
 
   // Initial load and when pageSize, sortBy, or sortOrder changes
-  React.useEffect(() => {
+  useEffect(() => {
     fetchTransactions({ pageSize, cursor: null, direction: 'next', sortBy, sortOrder });
   }, [pageSize, sortBy, sortOrder, fetchTransactions]);
 
-  const columns = React.useMemo(
-    () => [
-      {
-        accessorKey: 'ts',
-        header: () => (
-          <SortableHeader
-            label="Timestamp (UTC)"
-            sortKey="time"
-            sortBy={sortBy}
-            sortOrder={sortOrder}
-            setSortBy={setSortBy}
-            setSortOrder={setSortOrder}
-          />
-        ),
-        cell: (info) => (info.getValue() ? String(info.getValue()).replace('T', ' ') : ''),
-      },
-      {
-        accessorKey: 'provider_wallet',
-        header: 'Provider Wallet',
-        cell: (info) => {
-          const v = info.getValue();
-          return v ? String(v).slice(0, 8) + '...' : '';
-        },
-      },
-      {
-        accessorKey: 'requester_wallet',
-        header: 'Requester Wallet',
-        cell: (info) => {
-          const v = info.getValue();
-          return v ? String(v).slice(0, 8) + '...' : '';
-        },
-      },
-      {
-        accessorKey: 'tx',
-        header: 'Transaction Hash',
-        cell: (info) => {
-          const v = info.getValue();
-          if (!v) return '';
-          const short = String(v).slice(0, 8) + '...';
-          return (
-            <a
-              href={`https://polygonscan.com/tx/${v}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{ color: '#1976d2', textDecoration: 'underline' }}
-            >
-              {short}
-            </a>
-          );
-        },
-      },
-      {
-        accessorKey: 'invoiced_glm',
-        header: () => (
-          <SortableHeader
-            label="GLM"
-            sortKey="glm"
-            sortBy={sortBy}
-            sortOrder={sortOrder}
-            setSortBy={setSortBy}
-            setSortOrder={setSortOrder}
-          />
-        ),
-      },
-      {
-        accessorKey: 'invoiced_dollar',
-        header: () => (
-          <SortableHeader
-            label="USD"
-            sortKey="usd"
-            sortBy={sortBy}
-            sortOrder={sortOrder}
-            setSortBy={setSortBy}
-            setSortOrder={setSortOrder}
-          />
-        ),
-        cell: (info) => {
-          const v = info.getValue();
-          return v !== undefined && v !== null ? `$${v}` : '';
-        },
-      },
-    ],
-    [sortBy, sortOrder],
-  );
-
-  const table = useReactTable({
-    data: transactions,
-    columns,
-    getCoreRowModel: getCoreRowModel(),
-  });
-
   // SortableHeader component for column headers
-  function SortableHeader({ label, sortKey, sortBy, sortOrder, setSortBy, setSortOrder }) {
+  function SortableHeader({
+    label,
+    sortKey,
+    sortBy,
+    sortOrder,
+    setSortBy,
+    setSortOrder,
+  }: SortableHeaderProps) {
     const isActive = sortBy === sortKey;
     const handleClick = () => {
       if (isActive) {
@@ -175,7 +125,7 @@ export default function TransactionsTable() {
     };
     // Use MUI theme to reactively update arrow color
     const theme = useTheme();
-    const [hover, setHover] = React.useState(false);
+    const [hover, setHover] = useState(false);
     const arrowColor = hover ? 'rgb(83,166,38)' : theme.palette.mode === 'dark' ? '#444' : '#ddd';
     return (
       <span
@@ -233,6 +183,100 @@ export default function TransactionsTable() {
     );
   }
 
+  const columns: ColumnDef<Transaction>[] = useMemo(
+    () => [
+      {
+        accessorKey: 'ts',
+        header: () => (
+          <SortableHeader
+            label="Timestamp (UTC)"
+            sortKey="time"
+            sortBy={sortBy}
+            sortOrder={sortOrder}
+            setSortBy={setSortBy}
+            setSortOrder={setSortOrder}
+          />
+        ),
+        cell: (info: CellContext<Transaction, unknown>) => {
+          const value = info.getValue() as string | undefined;
+          return value ? String(value).replace('T', ' ') : '';
+        },
+      },
+      {
+        accessorKey: 'provider_wallet',
+        header: 'Provider Wallet',
+        cell: (info: CellContext<Transaction, unknown>) => {
+          const v = info.getValue() as string | undefined;
+          return v ? String(v).slice(0, 8) + '...' : '';
+        },
+      },
+      {
+        accessorKey: 'requester_wallet',
+        header: 'Requester Wallet',
+        cell: (info: CellContext<Transaction, unknown>) => {
+          const v = info.getValue() as string | undefined;
+          return v ? String(v).slice(0, 8) + '...' : '';
+        },
+      },
+      {
+        accessorKey: 'tx',
+        header: 'Transaction Hash',
+        cell: (info: CellContext<Transaction, unknown>) => {
+          const v = info.getValue() as string | undefined;
+          if (!v) return '';
+          const short = String(v).slice(0, 8) + '...';
+          return (
+            <a
+              href={`https://polygonscan.com/tx/${v}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ color: '#1976d2', textDecoration: 'underline' }}
+            >
+              {short}
+            </a>
+          );
+        },
+      },
+      {
+        accessorKey: 'invoiced_glm',
+        header: () => (
+          <SortableHeader
+            label="GLM"
+            sortKey="glm"
+            sortBy={sortBy}
+            sortOrder={sortOrder}
+            setSortBy={setSortBy}
+            setSortOrder={setSortOrder}
+          />
+        ),
+      },
+      {
+        accessorKey: 'invoiced_dollar',
+        header: () => (
+          <SortableHeader
+            label="USD"
+            sortKey="usd"
+            sortBy={sortBy}
+            sortOrder={sortOrder}
+            setSortBy={setSortBy}
+            setSortOrder={setSortOrder}
+          />
+        ),
+        cell: (info: CellContext<Transaction, unknown>) => {
+          const v = info.getValue() as number | undefined;
+          return v !== undefined && v !== null ? `$${v}` : '';
+        },
+      },
+    ],
+    [sortBy, sortOrder],
+  );
+
+  const table = useReactTable({
+    data: transactions,
+    columns,
+    getCoreRowModel: getCoreRowModel(),
+  });
+
   return (
     <>
       {/* Pagination controls at the top */}
@@ -248,7 +292,7 @@ export default function TransactionsTable() {
         <Select
           size="small"
           value={pageSize}
-          onChange={(e) => {
+          onChange={(e: SelectChangeEvent<number>) => {
             setPageSize(Number(e.target.value));
           }}
           sx={(theme) => ({

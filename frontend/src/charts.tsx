@@ -1,22 +1,22 @@
-// charts.js - Reusable chart components for Stats Salad dashboard
+// charts.ts - Reusable chart components for Stats Salad dashboard
 // Uses Material-UI, Chart.js, and custom data generators
 
-import React from 'react';
+import { useRef, useEffect, useState, ReactNode } from 'react';
 import 'chartjs-adapter-date-fns';
 import { Box, Typography, useTheme } from '@mui/material';
-import { Chart } from 'chart.js/auto';
+import { Chart, TooltipItem, ChartConfiguration, ChartOptions } from 'chart.js/auto';
 
 // Default plot height for all charts
 const plotHeight = 300;
 
 // Consistent axis styling for all charts
-const getAxisColors = (isDark) => ({
+const getAxisColors = (isDark: boolean) => ({
   tick: isDark ? 'rgba(255, 255, 255, 0.6)' : 'rgba(0, 0, 0, 0.6)',
   grid: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
 });
 
 // Time window display mapping
-const timeLabels = {
+const timeLabels: Record<string, string> = {
   day: 'over the last day',
   week: 'over the last week',
   two_weeks: 'over the last two weeks',
@@ -31,10 +31,11 @@ const timeLabels = {
 };
 
 // Check if time window uses hourly granularity (7d or less)
-const isHourlyGranularity = (window) => ['6h', '24h', '7d', 'day', 'week'].includes(window);
+const isHourlyGranularity = (window: string): boolean =>
+  ['6h', '24h', '7d', 'day', 'week'].includes(window);
 
 // Format dates specifically for tooltips (more detailed)
-const formatTooltipDate = (timestamp, window) => {
+const formatTooltipDate = (timestamp: number | string, window: string): string => {
   const date = new Date(timestamp);
   if (isHourlyGranularity(window)) {
     // Hourly views (6h, 24h, 7d, day, week): "Dec 19, 2024 at 14:30 UTC"
@@ -61,13 +62,17 @@ const formatTooltipDate = (timestamp, window) => {
 };
 
 // Common tooltip configuration for both chart types
-const getTooltipConfig = (isDark, originalTimestamps, window) => ({
+const getTooltipConfig = (
+  isDark: boolean,
+  originalTimestamps: (number | string)[],
+  window: string,
+) => ({
   backgroundColor: isDark ? 'rgba(0,0,0,0.8)' : '#fff',
   titleColor: isDark ? '#fff' : '#000',
   bodyColor: isDark ? '#fff' : '#000',
   displayColors: false, // Remove color swatch from tooltip
   callbacks: {
-    title: function (context) {
+    title: function (context: TooltipItem<'line'>[]) {
       // Use original timestamp for custom formatting
       const index = context[0].dataIndex;
       const timestamp = originalTimestamps[index];
@@ -77,7 +82,13 @@ const getTooltipConfig = (isDark, originalTimestamps, window) => ({
 });
 
 // Tooltip config for stacked charts - shows only the hovered series
-const getStackedTooltipConfig = (isDark, originalTimestamps, window, unit, legendColors) => ({
+const getStackedTooltipConfig = (
+  isDark: boolean,
+  originalTimestamps: (number | string)[],
+  window: string,
+  unit: string | undefined,
+  legendColors: string[],
+) => ({
   backgroundColor: isDark ? 'rgba(0,0,0,0.9)' : '#fff',
   titleColor: isDark ? '#fff' : '#000',
   bodyColor: isDark ? '#fff' : '#000',
@@ -85,24 +96,24 @@ const getStackedTooltipConfig = (isDark, originalTimestamps, window, unit, legen
   borderWidth: 1,
   padding: 12,
   usePointStyle: true,
-  pointStyle: 'circle',
+  pointStyle: 'circle' as const,
   boxPadding: 6,
   callbacks: {
-    title: function (context) {
+    title: function (context: TooltipItem<'line'>[]) {
       const index = context[0].dataIndex;
       const timestamp = originalTimestamps[index];
       return formatTooltipDate(timestamp, window);
     },
-    label: function (context) {
+    label: function (context: TooltipItem<'line'>) {
       const label = context.dataset.label || '';
-      const value = context.parsed.y;
+      const value = context.parsed.y ?? 0;
       const formattedValue =
         unit === 'nodes' || unit === 'count'
           ? Math.round(value).toLocaleString()
           : value.toLocaleString(undefined, { maximumFractionDigits: 1 });
       return ` ${label}: ${formattedValue} ${unit || ''}`;
     },
-    labelColor: function (context) {
+    labelColor: function (context: TooltipItem<'line'>) {
       const color = legendColors[context.datasetIndex % legendColors.length];
       return {
         borderColor: color,
@@ -116,21 +127,34 @@ const getStackedTooltipConfig = (isDark, originalTimestamps, window, unit, legen
 
 // Interaction config for stacked charts - show nearest single dataset
 const stackedInteractionConfig = {
-  mode: 'nearest',
+  mode: 'nearest' as const,
   intersect: false,
 };
 
+export interface TrendDataPoint {
+  x: number | string;
+  y: number;
+}
+
+export interface TrendChartProps {
+  id: string;
+  title: string;
+  description?: string;
+  trendWindow: string;
+  trendData: TrendDataPoint[];
+  unit?: string;
+  unitType?: 'front' | 'below';
+  isLoading?: boolean; // Currently unused but kept for API consistency
+}
+
+interface YAxisFormat {
+  title: string;
+  factor: number;
+  suffix: string;
+}
+
 /**
  * TrendChart - Line chart for single series trends
- * Props:
- *   id: string - unique canvas id
- *   title: string - chart title
- *   trendWindow: string - time window ('month', 'week', 'day')
- *   setTrendWindow: function - updates time window
- *   currentValue: number|null - current value to display
- *   setCurrentValue: function - updates current value
- *   unit: string (optional) - unit to display
- *   unitType: 'front'|'below' (optional) - unit display style
  */
 export function TrendChart({
   id,
@@ -140,19 +164,19 @@ export function TrendChart({
   trendData,
   unit,
   unitType,
-  isLoading,
-}) {
+  isLoading: _isLoading,
+}: TrendChartProps) {
+  void _isLoading; // Kept for API consistency
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
-  const chartRef = React.useRef(null);
-  const prevTrendData = React.useRef(null);
+  const chartRef = useRef<Chart | null>(null);
+  const prevTrendData = useRef<TrendDataPoint[] | null>(null);
 
   // Use lighter green for current values in dark mode
   const valueColor = isDark ? 'rgb(178,213,48)' : 'rgb(31, 79, 34)';
-  const headingColor = valueColor;
 
   // Determine y-axis scale and label formatting
-  function getYAxisFormat(maxVal) {
+  function getYAxisFormat(maxVal: number): YAxisFormat {
     if (maxVal >= 1e12) return { title: 'Trillions', factor: 1e12, suffix: 'T' };
     if (maxVal >= 1e9) return { title: 'Billions', factor: 1e9, suffix: 'B' };
     if (maxVal >= 1e6) return { title: 'Millions', factor: 1e6, suffix: 'M' };
@@ -160,32 +184,8 @@ export function TrendChart({
     return { title: '', factor: 1, suffix: '' };
   }
 
-  function formatXAxis(ts, window) {
-    const date = new Date(ts);
-    if (window === 'day') {
-      // DD HH:MM (UTC)
-      return date.toLocaleString(undefined, {
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false,
-        timeZone: 'UTC',
-        timeZoneName: 'short',
-      });
-    } else {
-      // DD MMM YYYY (UTC)
-      return date.toLocaleString(undefined, {
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric',
-        timeZone: 'UTC',
-        timeZoneName: 'short',
-      });
-    }
-  }
-
-  React.useEffect(() => {
-    const canvas = document.getElementById(id);
+  useEffect(() => {
+    const canvas = document.getElementById(id) as HTMLCanvasElement | null;
     if (!canvas) return;
 
     const yMax = trendData.length > 0 ? Math.max(...trendData.map((d) => Math.abs(d.y))) : 0;
@@ -253,9 +253,10 @@ export function TrendChart({
               },
               ticks: {
                 color: getAxisColors(isDark).tick,
-                callback: function (value) {
-                  if (yFormat.factor === 1) return value.toLocaleString();
-                  const v = value / yFormat.factor;
+                callback: function (value: string | number) {
+                  const numValue = typeof value === 'string' ? parseFloat(value) : value;
+                  if (yFormat.factor === 1) return numValue.toLocaleString();
+                  const v = numValue / yFormat.factor;
                   if (v % 1 === 0) return v + yFormat.suffix;
                   if (Math.abs(v) < 10) return v.toFixed(2).replace(/\.?0+$/, '') + yFormat.suffix;
                   if (Math.abs(v) < 100) return v.toFixed(1).replace(/\.?0+$/, '') + yFormat.suffix;
@@ -264,40 +265,44 @@ export function TrendChart({
               },
             },
           },
-        },
-      });
+        } as ChartOptions<'line'>,
+      } as ChartConfiguration<'line'>);
     } else {
       // Update chart instance
       const chart = chartRef.current;
       chart.data.datasets = [dataset];
-      chart.options.scales.x.type = 'time';
-      chart.options.scales.x.offset = true;
-      chart.options.scales.x.bounds = 'data';
-      chart.options.scales.x.time = {
-        unit: isHourlyGranularity(trendWindow) ? 'hour' : 'day',
-        displayFormats: {
-          hour: 'MMM d, HH:mm',
-          day: 'MMM d',
-        },
-      };
-      chart.options.scales.y.ticks.callback = function (value) {
-        // Show one decimal for 'k' scale unless unit is 'count'
-        if (yFormat.factor === 1) return value.toLocaleString();
-        const v = value / yFormat.factor;
-        if (unit === 'count') {
-          // For count, always show integer
+      const options = chart.options as ChartOptions<'line'>;
+      if (options.scales?.x) {
+        (options.scales.x as { type?: string; offset?: boolean; bounds?: string; time?: { unit?: string; displayFormats?: Record<string, string> } }).type = 'time';
+        (options.scales.x as { offset?: boolean }).offset = true;
+        (options.scales.x as { bounds?: string }).bounds = 'data';
+        (options.scales.x as { time?: { unit?: string; displayFormats?: Record<string, string> } }).time = {
+          unit: isHourlyGranularity(trendWindow) ? 'hour' : 'day',
+          displayFormats: {
+            hour: 'MMM d, HH:mm',
+            day: 'MMM d',
+          },
+        };
+      }
+      if (options.scales?.y?.ticks) {
+        options.scales.y.ticks.callback = function (value: string | number) {
+          const numValue = typeof value === 'string' ? parseFloat(value) : value;
+          // Show one decimal for 'k' scale unless unit is 'count'
+          if (yFormat.factor === 1) return numValue.toLocaleString();
+          const v = numValue / yFormat.factor;
+          if (unit === 'count') {
+            // For count, always show integer
+            return Math.round(v) + yFormat.suffix;
+          }
+          if (yFormat.suffix === 'k') {
+            // For k, always show at most 1 decimal
+            return v % 1 === 0 ? v + yFormat.suffix : v.toFixed(1).replace(/\.0$/, '') + yFormat.suffix;
+          }
+          if (Math.abs(v) < 10) return v.toFixed(2).replace(/\.?0+$/, '') + yFormat.suffix;
+          if (Math.abs(v) < 100) return v.toFixed(1).replace(/\.?0+$/, '') + yFormat.suffix;
           return Math.round(v) + yFormat.suffix;
-        }
-        if (yFormat.suffix === 'k') {
-          // For k, always show at most 1 decimal
-          return v % 1 === 0
-            ? v + yFormat.suffix
-            : v.toFixed(1).replace(/\.0$/, '') + yFormat.suffix;
-        }
-        if (Math.abs(v) < 10) return v.toFixed(2).replace(/\.?0+$/, '') + yFormat.suffix;
-        if (Math.abs(v) < 100) return v.toFixed(1).replace(/\.?0+$/, '') + yFormat.suffix;
-        return Math.round(v) + yFormat.suffix;
-      };
+        };
+      }
       chart.update('none');
     }
 
@@ -309,20 +314,31 @@ export function TrendChart({
         chartRef.current = null;
       }
     };
-  }, [id, trendData, trendWindow, title]);
+  }, [id, trendData, trendWindow, title, isDark, unit]);
 
   // Update colors when theme changes without reloading chart
-  React.useEffect(() => {
+  useEffect(() => {
     if (chartRef.current) {
       const chart = chartRef.current;
-      const isDark = theme.palette.mode === 'dark';
-      chart.options.scales.x.ticks.color = getAxisColors(isDark).tick;
-      chart.options.scales.x.grid.color = getAxisColors(isDark).grid;
-      chart.options.scales.y.grid.color = getAxisColors(isDark).grid;
-      chart.options.scales.y.ticks.color = getAxisColors(isDark).tick;
+      const isDarkMode = theme.palette.mode === 'dark';
+      const options = chart.options as ChartOptions<'line'>;
+      if (options.scales?.x?.ticks) {
+        options.scales.x.ticks.color = getAxisColors(isDarkMode).tick;
+      }
+      if (options.scales?.x?.grid) {
+        options.scales.x.grid.color = getAxisColors(isDarkMode).grid;
+      }
+      if (options.scales?.y?.grid) {
+        options.scales.y.grid.color = getAxisColors(isDarkMode).grid;
+      }
+      if (options.scales?.y?.ticks) {
+        options.scales.y.ticks.color = getAxisColors(isDarkMode).tick;
+      }
       // Update tooltip config with current theme and timestamps
       const originalTimestamps = trendData.map((d) => d.x);
-      chart.options.plugins.tooltip = getTooltipConfig(isDark, originalTimestamps, trendWindow);
+      if (options.plugins?.tooltip) {
+        Object.assign(options.plugins.tooltip, getTooltipConfig(isDarkMode, originalTimestamps, trendWindow));
+      }
       chart.update('none');
     }
   }, [theme.palette.mode, trendData, trendWindow]);
@@ -330,7 +346,7 @@ export function TrendChart({
   // Value display logic
   const lastValue = trendData.length > 0 ? trendData[trendData.length - 1].y : null;
 
-  function formatValue(val, unit) {
+  function formatValue(val: number | null, unit: string | undefined): { value: string; unit: string | undefined } {
     if (val === null || val === undefined) return { value: '--', unit };
     // If unit is 'count', always show as integer, no decimals or suffixes
     if (unit === 'count' || unit === 'nodes') {
@@ -340,19 +356,19 @@ export function TrendChart({
     if (unit === 'GB') {
       if (Math.abs(val) >= 1e12) {
         // EB (exabytes, for completeness)
-        let eb = val / 1e12;
+        const eb = val / 1e12;
         return { value: eb % 1 === 0 ? eb.toFixed(0) : eb.toFixed(eb < 10 ? 2 : 1), unit: 'EB' };
       } else if (Math.abs(val) >= 1e9) {
         // ZB (zettabytes, for completeness)
-        let zb = val / 1e9;
+        const zb = val / 1e9;
         return { value: zb % 1 === 0 ? zb.toFixed(0) : zb.toFixed(zb < 10 ? 2 : 1), unit: 'ZB' };
       } else if (Math.abs(val) >= 1e6) {
         // PB
-        let pb = val / 1e6;
+        const pb = val / 1e6;
         return { value: pb % 1 === 0 ? pb.toFixed(0) : pb.toFixed(pb < 10 ? 2 : 1), unit: 'PB' };
       } else if (Math.abs(val) >= 1e3) {
         // TB
-        let tb = val / 1e3;
+        const tb = val / 1e3;
         return { value: tb % 1 === 0 ? tb.toFixed(0) : tb.toFixed(tb < 10 ? 2 : 1), unit: 'TB' };
       } else {
         return { value: val.toLocaleString(), unit: 'GB' };
@@ -368,17 +384,18 @@ export function TrendChart({
     } else if (Math.abs(val) < 1e6) {
       return { value: Math.round(val / 1e3) + 'k', unit };
     } else if (Math.abs(val) < 1e9) {
-      let m = val / 1e6;
+      const m = val / 1e6;
       return { value: m % 1 === 0 ? m.toFixed(0) + 'M' : m.toFixed(m < 10 ? 2 : 1) + 'M', unit };
     } else if (Math.abs(val) < 1e12) {
-      let b = val / 1e9;
+      const b = val / 1e9;
       return { value: b % 1 === 0 ? b.toFixed(0) + 'B' : b.toFixed(b < 10 ? 2 : 1) + 'B', unit };
     } else {
-      let t = val / 1e12;
+      const t = val / 1e12;
       return { value: t % 1 === 0 ? t.toFixed(0) + 'T' : t.toFixed(t < 10 ? 2 : 1) + 'T', unit };
     }
   }
-  let valueDisplay = '--';
+
+  let valueDisplay: ReactNode = '--';
   const { value: formattedValue, unit: formattedUnit } = formatValue(lastValue, unit);
   if (lastValue !== null) {
     if (unitType === 'front' && formattedUnit) {
@@ -500,34 +517,64 @@ export function TrendChart({
   );
 }
 
+export interface ChartDataset {
+  label: string;
+  data: number[];
+  backgroundColor?: string;
+  borderColor?: string;
+  borderWidth?: number;
+  fill?: boolean;
+}
+
+export interface ChartData {
+  labels: (number | string)[];
+  datasets: ChartDataset[];
+}
+
+export interface StackedChartProps {
+  id: string;
+  title: string;
+  description?: string;
+  trendWindow: string;
+  setTrendWindow?: (window: string) => void;
+  labels?: (number | string)[];
+  chartData?: ChartData | null;
+  unit?: string;
+}
+
+interface InternalDataset {
+  label: string;
+  data: { x: number | string; y: number }[];
+  backgroundColor: string;
+  borderColor: string;
+  borderWidth: number;
+  fill: boolean;
+}
+
+interface InternalChartData {
+  datasets: InternalDataset[];
+}
+
 /**
  * StackedChart - Multi-series stacked line chart
- * Props:
- *   id: string - unique canvas id
- *   title: string - chart title
- *   trendWindow: string - time window
- *   setTrendWindow: function - updates time window
- *   labels: array - series labels
  */
 export function StackedChart({
   id,
   title,
   description,
   trendWindow,
-  setTrendWindow,
-  labels,
   chartData,
   unit,
-}) {
+}: StackedChartProps) {
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
-  const chartRef = React.useRef(null);
-  const [internalChartData, setInternalChartData] = React.useState(null);
-  const [currents, setCurrents] = React.useState([]);
-  const [isNarrow, setIsNarrow] = React.useState(
+  const chartRef = useRef<Chart | null>(null);
+  const [internalChartData, setInternalChartData] = useState<InternalChartData | null>(null);
+  const [currents, setCurrents] = useState<number[]>([]);
+  const [isNarrow, setIsNarrow] = useState(
     typeof window !== 'undefined' ? window.innerWidth < 1400 : false,
   );
-  const [legendBelow, setLegendBelow] = React.useState(
+  const [legendBelow, setLegendBelow] = useState(
     typeof window !== 'undefined' ? window.innerWidth < 1100 : false,
   );
 
@@ -535,7 +582,7 @@ export function StackedChart({
   const legendColors = ['#b2d530', '#9acc35', '#7bb82e', '#53a626', '#3d6b28', '#1f4f22'];
 
   // Responsive legend position and chart width
-  React.useEffect(() => {
+  useEffect(() => {
     function handleResize() {
       setIsNarrow(window.innerWidth < 1400);
       setLegendBelow(window.innerWidth < 1100);
@@ -544,26 +591,9 @@ export function StackedChart({
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Format x-axis labels consistently
-  function formatXAxis(ts, window) {
-    const date = new Date(ts);
-    if (window === 'day') {
-      // DD HH:MM (locale-aware)
-      return date.toLocaleString(undefined, {
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false,
-      });
-    } else {
-      // DD MMM YYYY (locale-aware)
-      return date.toLocaleString(undefined, { day: '2-digit', month: 'short', year: 'numeric' });
-    }
-  }
-
   // Truncate labels to 8 characters with ellipsis, remove RTX/GTX prefix and parenthetical for legend only
-  function legendLabel(label) {
-    if (!label) return label;
+  function legendLabel(label: string | undefined): string {
+    if (!label) return label || '';
     // Remove RTX/GTX prefix (case-insensitive, with or without space)
     let clean = label.replace(/^(rtx|gtx)\s*/i, '');
     // Extract parenthetical (e.g., (8GB)) if present
@@ -581,10 +611,10 @@ export function StackedChart({
   }
 
   // Use provided chartData, but convert to time scale format and apply colors
-  React.useEffect(() => {
+  useEffect(() => {
     if (chartData && chartData.labels && chartData.datasets && chartData.datasets.length > 0) {
       // Convert each dataset's data to [{x, y}] objects for time scale, and apply legend colors
-      const datasets = chartData.datasets.map((ds, idx) => ({
+      const datasets: InternalDataset[] = chartData.datasets.map((ds, idx) => ({
         ...ds,
         data: chartData.labels.map((label, i) => ({ x: label, y: ds.data[i] })),
         backgroundColor: legendColors[idx % legendColors.length] + '80', // 50% opacity for fill
@@ -602,33 +632,20 @@ export function StackedChart({
   }, [chartData]);
 
   // Determine y-axis scale and label formatting for StackedChart
-  function getYAxisFormat(maxVal) {
+  function getYAxisFormat(maxVal: number): YAxisFormat {
     if (maxVal >= 1e12) return { title: 'Trillions', factor: 1e12, suffix: 'T' };
     if (maxVal >= 1e9) return { title: 'Billions', factor: 1e9, suffix: 'B' };
     if (maxVal >= 1e6) return { title: 'Millions', factor: 1e6, suffix: 'M' };
     if (maxVal >= 1e3) return { title: 'Thousands', factor: 1e3, suffix: 'k' };
     return { title: '', factor: 1, suffix: '' };
   }
-  const yMax =
-    internalChartData && internalChartData.datasets.length > 0
-      ? Math.max(
-          ...internalChartData.datasets[0].data.map((_, timeIndex) =>
-            // Sum all series values at this time point
-            internalChartData.datasets.reduce(
-              (sum, ds) => sum + Math.abs(ds.data[timeIndex]?.y || 0),
-              0,
-            ),
-          ),
-        )
-      : 0;
-  const yFormat = getYAxisFormat(yMax);
 
   // Render chart when data changes
-  React.useEffect(() => {
-    const ctx = document.getElementById(id);
+  useEffect(() => {
+    const ctx = document.getElementById(id) as HTMLCanvasElement | null;
     if (!ctx) return;
 
-    const yMax =
+    const localYMax =
       internalChartData && internalChartData.datasets.length > 0
         ? Math.max(
             ...internalChartData.datasets[0].data.map((_, timeIndex) =>
@@ -640,7 +657,7 @@ export function StackedChart({
             ),
           )
         : 0;
-    const yFormat = getYAxisFormat(yMax);
+    const localYFormat = getYAxisFormat(localYMax);
 
     if (!chartRef.current) {
       // Create chart even with empty data to show empty state
@@ -648,7 +665,7 @@ export function StackedChart({
         const originalTimestamps = chartData?.labels || [];
         chartRef.current = new Chart(ctx, {
           type: 'line',
-          data: internalChartData,
+          data: internalChartData as { datasets: { label: string; data: { x: number | string; y: number }[]; backgroundColor: string; borderColor: string; borderWidth: number; fill: boolean }[] },
           options: {
             responsive: true,
             maintainAspectRatio: false,
@@ -700,60 +717,67 @@ export function StackedChart({
                 },
                 ticks: {
                   color: getAxisColors(isDark).tick,
-                  callback: function (value) {
+                  callback: function (value: string | number) {
+                    const numValue = typeof value === 'string' ? parseFloat(value) : value;
                     // Show one decimal for 'k' scale unless unit is 'count'
-                    if (yFormat.factor === 1) return value.toLocaleString();
-                    const v = value / yFormat.factor;
+                    if (localYFormat.factor === 1) return numValue.toLocaleString();
+                    const v = numValue / localYFormat.factor;
                     if (unit === 'count') {
                       // For count, always show integer
-                      return Math.round(v) + yFormat.suffix;
+                      return Math.round(v) + localYFormat.suffix;
                     }
-                    if (yFormat.suffix === 'k') {
+                    if (localYFormat.suffix === 'k') {
                       // For k, show one decimal if not integer
-                      return v % 1 === 0 ? v + yFormat.suffix : v.toFixed(1) + yFormat.suffix;
+                      return v % 1 === 0 ? v + localYFormat.suffix : v.toFixed(1) + localYFormat.suffix;
                     }
                     if (Math.abs(v) < 10)
-                      return v.toFixed(2).replace(/\.?0+$/, '') + yFormat.suffix;
+                      return v.toFixed(2).replace(/\.?0+$/, '') + localYFormat.suffix;
                     if (Math.abs(v) < 100)
-                      return v.toFixed(1).replace(/\.?0+$/, '') + yFormat.suffix;
-                    return Math.round(v) + yFormat.suffix;
+                      return v.toFixed(1).replace(/\.?0+$/, '') + localYFormat.suffix;
+                    return Math.round(v) + localYFormat.suffix;
                   },
                 },
               },
             },
             interaction: stackedInteractionConfig,
-          },
-        });
+          } as ChartOptions<'line'>,
+        } as ChartConfiguration<'line'>);
       }
     } else {
       const chart = chartRef.current;
       if (internalChartData) {
-        chart.data = internalChartData;
-        chart.options.scales.x.type = 'time';
-        chart.options.scales.x.offset = true;
-        chart.options.scales.x.bounds = 'data';
-        chart.options.scales.x.time = {
-          unit: isHourlyGranularity(trendWindow) ? 'hour' : 'day',
-          displayFormats: {
-            hour: 'MMM d, HH:mm',
-            day: 'MMM d',
-          },
-        };
-        chart.options.scales.y.ticks.callback = function (value) {
-          if (yFormat.factor === 1) return value.toLocaleString();
-          const v = value / yFormat.factor;
-          if (v % 1 === 0) {
-            // Add commas for large whole numbers
-            return v >= 1000 ? v.toLocaleString() + yFormat.suffix : v + yFormat.suffix;
-          }
-          if (Math.abs(v) < 10) return v.toFixed(2).replace(/\.?0+$/, '') + yFormat.suffix;
-          if (Math.abs(v) < 100) return v.toFixed(1).replace(/\.?0+$/, '') + yFormat.suffix;
-          // Add commas for large rounded numbers
-          const rounded = Math.round(v);
-          return rounded >= 1000
-            ? rounded.toLocaleString() + yFormat.suffix
-            : rounded + yFormat.suffix;
-        };
+        chart.data = internalChartData as { datasets: { label: string; data: { x: number | string; y: number }[]; backgroundColor: string; borderColor: string; borderWidth: number; fill: boolean }[] };
+        const options = chart.options as ChartOptions<'line'>;
+        if (options.scales?.x) {
+          (options.scales.x as { type?: string }).type = 'time';
+          (options.scales.x as { offset?: boolean }).offset = true;
+          (options.scales.x as { bounds?: string }).bounds = 'data';
+          (options.scales.x as { time?: { unit?: string; displayFormats?: Record<string, string> } }).time = {
+            unit: isHourlyGranularity(trendWindow) ? 'hour' : 'day',
+            displayFormats: {
+              hour: 'MMM d, HH:mm',
+              day: 'MMM d',
+            },
+          };
+        }
+        if (options.scales?.y?.ticks) {
+          options.scales.y.ticks.callback = function (value: string | number) {
+            const numValue = typeof value === 'string' ? parseFloat(value) : value;
+            if (localYFormat.factor === 1) return numValue.toLocaleString();
+            const v = numValue / localYFormat.factor;
+            if (v % 1 === 0) {
+              // Add commas for large whole numbers
+              return v >= 1000 ? v.toLocaleString() + localYFormat.suffix : v + localYFormat.suffix;
+            }
+            if (Math.abs(v) < 10) return v.toFixed(2).replace(/\.?0+$/, '') + localYFormat.suffix;
+            if (Math.abs(v) < 100) return v.toFixed(1).replace(/\.?0+$/, '') + localYFormat.suffix;
+            // Add commas for large rounded numbers
+            const rounded = Math.round(v);
+            return rounded >= 1000
+              ? rounded.toLocaleString() + localYFormat.suffix
+              : rounded + localYFormat.suffix;
+          };
+        }
         chart.update('none');
       }
     }
@@ -764,29 +788,78 @@ export function StackedChart({
         chartRef.current = null;
       }
     };
-  }, [id, internalChartData, isDark, trendWindow]);
+  }, [id, internalChartData, isDark, trendWindow, chartData, unit]);
 
   // Update colors when theme changes without reloading chart
-  React.useEffect(() => {
+  useEffect(() => {
     if (chartRef.current) {
       const chart = chartRef.current;
-      const isDark = theme.palette.mode === 'dark';
-      chart.options.scales.x.ticks.color = getAxisColors(isDark).tick;
-      chart.options.scales.x.grid.color = getAxisColors(isDark).grid;
-      chart.options.scales.y.grid.color = getAxisColors(isDark).grid;
-      chart.options.scales.y.ticks.color = getAxisColors(isDark).tick;
+      const isDarkMode = theme.palette.mode === 'dark';
+      const options = chart.options as ChartOptions<'line'>;
+      if (options.scales?.x?.ticks) {
+        options.scales.x.ticks.color = getAxisColors(isDarkMode).tick;
+      }
+      if (options.scales?.x?.grid) {
+        options.scales.x.grid.color = getAxisColors(isDarkMode).grid;
+      }
+      if (options.scales?.y?.grid) {
+        options.scales.y.grid.color = getAxisColors(isDarkMode).grid;
+      }
+      if (options.scales?.y?.ticks) {
+        options.scales.y.ticks.color = getAxisColors(isDarkMode).tick;
+      }
       // Update tooltip config with current theme and timestamps
       const originalTimestamps = chartData ? chartData.labels : [];
-      chart.options.plugins.tooltip = getStackedTooltipConfig(
-        isDark,
-        originalTimestamps,
-        trendWindow,
-        unit,
-        legendColors,
-      );
+      if (options.plugins?.tooltip) {
+        Object.assign(
+          options.plugins.tooltip,
+          getStackedTooltipConfig(isDarkMode, originalTimestamps, trendWindow, unit, legendColors),
+        );
+      }
       chart.update('none');
     }
   }, [theme.palette.mode, chartData, trendWindow, unit]);
+
+  // Helper to format legend values
+  const formatLegendValue = (val: number, scale: { factor: number; suffix: string }): string => {
+    if (unit === 'count' || unit === 'nodes') {
+      // Always show as integer, no decimals or suffixes, even if scaled
+      return Math.round(val).toLocaleString();
+    }
+    if (scale.factor === 1) {
+      // Consistent 1 decimal for all non-count values, keep trailing zeros
+      return val.toLocaleString(undefined, {
+        minimumFractionDigits: 1,
+        maximumFractionDigits: 1,
+      });
+    } else {
+      const scaledVal = val / scale.factor;
+      // Consistent 1 decimal for all scaled values
+      return `${scaledVal.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}${scale.suffix}`;
+    }
+  };
+
+  // Calculate scale based on majority voting
+  const getScale = (values: number[]) => {
+    const scales = values.map((val) =>
+      val >= 1e9 ? 'B' : val >= 1e6 ? 'M' : val >= 1000 ? 'k' : 'raw',
+    );
+    const scaleCounts: Record<string, number> = { raw: 0, k: 0, M: 0, B: 0 };
+    scales.forEach((s) => scaleCounts[s]++);
+
+    // Use the scale that the majority of values would use
+    const majorityScale = Object.keys(scaleCounts).reduce((a, b) =>
+      scaleCounts[a] > scaleCounts[b] ? a : b,
+    );
+
+    return majorityScale === 'B'
+      ? { factor: 1e9, suffix: 'B' }
+      : majorityScale === 'M'
+        ? { factor: 1e6, suffix: 'M' }
+        : majorityScale === 'k'
+          ? { factor: 1000, suffix: 'k' }
+          : { factor: 1, suffix: '' };
+  };
 
   return (
     <Box
@@ -866,27 +939,7 @@ export function StackedChart({
             </Typography>
             {currents.length > 0 && internalChartData && internalChartData.datasets
               ? (() => {
-                  // Determine the scale based on majority voting of what each value would naturally use
-                  const scales = currents.map((val) =>
-                    val >= 1e9 ? 'B' : val >= 1e6 ? 'M' : val >= 1000 ? 'k' : 'raw',
-                  );
-                  const scaleCounts = { raw: 0, k: 0, M: 0, B: 0 };
-                  scales.forEach((s) => scaleCounts[s]++);
-
-                  // Use the scale that the majority of values would use
-                  const majorityScale = Object.keys(scaleCounts).reduce((a, b) =>
-                    scaleCounts[a] > scaleCounts[b] ? a : b,
-                  );
-
-                  const scale =
-                    majorityScale === 'B'
-                      ? { factor: 1e9, suffix: 'B' }
-                      : majorityScale === 'M'
-                        ? { factor: 1e6, suffix: 'M' }
-                        : majorityScale === 'k'
-                          ? { factor: 1000, suffix: 'k' }
-                          : { factor: 1, suffix: '' };
-
+                  const scale = getScale(currents);
                   return currents.map((val, idx) => (
                     <Box
                       key={idx}
@@ -918,23 +971,7 @@ export function StackedChart({
                           minWidth: '4.5em',
                         }}
                       >
-                        {(() => {
-                          if (unit === 'count' || unit === 'nodes') {
-                            // Always show as integer, no decimals or suffixes, even if scaled
-                            return Math.round(val).toLocaleString();
-                          }
-                          if (scale.factor === 1) {
-                            // Consistent 1 decimal for all non-count values, keep trailing zeros
-                            return val.toLocaleString(undefined, {
-                              minimumFractionDigits: 1,
-                              maximumFractionDigits: 1,
-                            });
-                          } else {
-                            const scaledVal = val / scale.factor;
-                            // Consistent 1 decimal for all scaled values
-                            return `${scaledVal.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}${scale.suffix}`;
-                          }
-                        })()}
+                        {formatLegendValue(val, scale)}
                       </Typography>
                       <Typography
                         variant="body2"
@@ -974,27 +1011,7 @@ export function StackedChart({
             <Box sx={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center' }}>
               {currents.length > 0 && internalChartData && internalChartData.datasets
                 ? (() => {
-                    // Determine the scale based on majority voting of what each value would naturally use
-                    const scales = currents.map((val) =>
-                      val >= 1e9 ? 'B' : val >= 1e6 ? 'M' : val >= 1000 ? 'k' : 'raw',
-                    );
-                    const scaleCounts = { raw: 0, k: 0, M: 0, B: 0 };
-                    scales.forEach((s) => scaleCounts[s]++);
-
-                    // Use the scale that the majority of values would use
-                    const majorityScale = Object.keys(scaleCounts).reduce((a, b) =>
-                      scaleCounts[a] > scaleCounts[b] ? a : b,
-                    );
-
-                    const scale =
-                      majorityScale === 'B'
-                        ? { factor: 1e9, suffix: 'B' }
-                        : majorityScale === 'M'
-                          ? { factor: 1e6, suffix: 'M' }
-                          : majorityScale === 'k'
-                            ? { factor: 1000, suffix: 'k' }
-                            : { factor: 1, suffix: '' };
-
+                    const scale = getScale(currents);
                     return currents.map((val, idx) => (
                       <Box
                         key={idx}
@@ -1027,27 +1044,7 @@ export function StackedChart({
                             minWidth: '4.5em',
                           }}
                         >
-                          {(() => {
-                            if (unit === 'count' || unit === 'nodes') {
-                              // Always show as integer, no decimals or suffixes, even if scaled
-                              return Math.round(val).toLocaleString();
-                            }
-                            if (scale.factor === 1) {
-                              // Consistent 1 decimal for all non-count values, keep trailing zeros
-                              return val.toLocaleString(undefined, {
-                                minimumFractionDigits: 1,
-                                maximumFractionDigits: 1,
-                              });
-                            } else {
-                              // For 'nodes', never show decimals or suffixes, even if scaled
-                              if (unit === 'nodes') {
-                                return Math.round(val).toLocaleString();
-                              }
-                              const scaledVal = val / scale.factor;
-                              // Consistent 1 decimal for all scaled values
-                              return `${scaledVal.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}${scale.suffix}`;
-                            }
-                          })()}
+                          {formatLegendValue(val, scale)}
                         </Typography>
                         <Typography
                           variant="body2"

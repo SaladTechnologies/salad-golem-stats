@@ -1,18 +1,74 @@
-// Dashboard.jsx - Main dashboard component for Stats Salad
-// Uses Material-UI, Chart.jsx, react-globe.gl, and custom chart components
+// Dashboard.tsx - Main dashboard component for Stats Salad
+// Uses Material-UI, Chart.tsx, react-globe.gl, and custom chart components
 
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, ReactNode } from 'react';
+import type { Theme, SxProps } from '@mui/material';
+import {
+  Container,
+  Typography,
+  Box,
+  Paper,
+  Grid,
+  ThemeProvider,
+  createTheme,
+  CssBaseline,
+  GlobalStyles,
+  Switch,
+  FormControlLabel,
+  PaperProps,
+} from '@mui/material';
+import { TrendChart, StackedChart, TrendDataPoint, ChartData } from './charts';
+import MetricsBar from './MetricsBar';
+import TransactionsTable from './TransactionsTable';
+import GlobeComponent, { GeoData } from './Globe';
+
+// API response types
+interface TimeSeriesPoint {
+  timestamp: string;
+  active_nodes?: number;
+  total_fees?: number;
+  compute_hours?: number;
+  ram_hours?: number;
+  core_hours?: number;
+  gpu_hours?: number;
+}
+
+interface PlansMetricsTotals {
+  active_nodes?: number;
+  total_fees?: number;
+  compute_hours?: number;
+}
+
+interface PlansMetricsData {
+  totals?: PlansMetricsTotals;
+  time_series?: TimeSeriesPoint[];
+  active_nodes_by_gpu_model_ts?: ChartData;
+  active_nodes_by_vram_ts?: ChartData;
+  gpu_hours_by_model_ts?: ChartData;
+  gpu_hours_by_vram_ts?: ChartData;
+}
+
+interface Transaction {
+  ts?: string;
+  provider_wallet?: string;
+  requester_wallet?: string;
+  tx?: string;
+  invoiced_glm?: number;
+  invoiced_dollar?: number;
+}
 
 // Hook for fetching plan metrics from the new /metrics/plans endpoint
 function usePlansMetrics(period = '7d') {
-  const [data, setData] = useState(undefined);
+  const [data, setData] = useState<PlansMetricsData | null | undefined>(undefined);
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     setIsLoading(true);
     fetch(`${import.meta.env.VITE_STATS_API_URL}/metrics/plans?period=${period}`)
-      .then((res) => (res.ok ? res.json() : Promise.reject('Failed to fetch plans metrics')))
+      .then((res) =>
+        res.ok ? (res.json() as Promise<PlansMetricsData>) : Promise.reject('Failed to fetch plans metrics'),
+      )
       .then((result) => {
         if (!cancelled) {
           setData(result);
@@ -35,31 +91,16 @@ function usePlansMetrics(period = '7d') {
 }
 
 // Transform time_series to TrendChart format: [{x: timestamp, y: value}]
-function transformTimeSeries(timeSeries, metric) {
+function transformTimeSeries(
+  timeSeries: TimeSeriesPoint[] | undefined,
+  metric: keyof TimeSeriesPoint,
+): TrendDataPoint[] {
   if (!timeSeries || !Array.isArray(timeSeries)) return [];
   return timeSeries.map((point) => ({
     x: new Date(point.timestamp).getTime(),
-    y: point[metric] || 0,
+    y: (point[metric] as number) || 0,
   }));
 }
-
-import {
-  Container,
-  Typography,
-  Box,
-  Paper,
-  Grid,
-  ThemeProvider,
-  createTheme,
-  CssBaseline,
-  GlobalStyles,
-  Switch,
-  FormControlLabel,
-} from '@mui/material';
-import { TrendChart, StackedChart } from './charts.jsx';
-import MetricsBar from './MetricsBar.jsx';
-import TransactionsTable from './TransactionsTable.jsx';
-import GlobeComponent from './Globe.jsx';
 
 // Custom color palette
 const saladPalette = {
@@ -71,26 +112,31 @@ const saladPalette = {
   navy: 'rgb(10,33,51)', // Deep navy for backgrounds
 };
 
+interface StyledPaperProps extends Omit<PaperProps, 'sx'> {
+  children: ReactNode;
+  sx?: SxProps<Theme>;
+}
+
 // StyledPaper: reusable Paper with common dashboard styles
-function StyledPaper({ children, sx = {}, ...props }) {
-  // theme is available via ThemeProvider context
-  // Use function form for sx to access theme
+function StyledPaper({ children, sx, ...props }: StyledPaperProps) {
   return (
     <Paper
       elevation={2}
-      sx={(theme) => ({
-        pt: 1,
-        mb: 4,
-        borderRadius: 2,
-        px: 4,
-        pb: 4,
-        bgcolor: theme.palette.background.paper,
-        border: `1px solid ${theme.palette.mode === 'dark' ? '#333' : '#e0e0e0'}`,
-        backgroundImage: 'none',
-        maxWidth: '96vw',
-        mx: 'auto',
-        ...(typeof sx === 'function' ? sx(theme) : sx),
-      })}
+      sx={[
+        (theme: Theme) => ({
+          pt: 1,
+          mb: 4,
+          borderRadius: 2,
+          px: 4,
+          pb: 4,
+          bgcolor: theme.palette.background.paper,
+          border: `1px solid ${theme.palette.mode === 'dark' ? '#333' : '#e0e0e0'}`,
+          backgroundImage: 'none',
+          maxWidth: '96vw',
+          mx: 'auto',
+        }),
+        ...(Array.isArray(sx) ? sx : sx ? [sx] : []),
+      ]}
       className="w-block"
       {...props}
     >
@@ -99,25 +145,29 @@ function StyledPaper({ children, sx = {}, ...props }) {
   );
 }
 
+interface StyledHeadingProps {
+  children: ReactNode;
+  mt?: number;
+}
+
 // StyledHeading: reusable heading with border line
-function StyledHeading({ children, mt = 2, ...props }) {
+function StyledHeading({ children, mt = 2 }: StyledHeadingProps) {
   return (
     <>
       <Typography
         variant="h5"
-        sx={(theme) => ({
+        sx={(theme: Theme) => ({
           mt,
           mb: 0.5,
           color: theme.palette.primary.main,
           fontSize: '1.75rem',
         })}
         className="w-block"
-        {...props}
       >
         {children}
       </Typography>
       <Box
-        sx={(theme) => ({
+        sx={(theme: Theme) => ({
           width: '90%',
           borderBottom: `2px solid ${theme.palette.mode === 'dark' ? 'rgba(219,243,193,0.3)' : 'rgb(219,243,193)'}`,
           mb: 2,
@@ -129,7 +179,7 @@ function StyledHeading({ children, mt = 2, ...props }) {
 }
 
 // Material-UI theme functions for light and dark modes
-const createAppTheme = (mode) =>
+const createAppTheme = (mode: 'light' | 'dark') =>
   createTheme({
     palette: {
       mode,
@@ -153,13 +203,11 @@ const createAppTheme = (mode) =>
         primary: mode === 'dark' ? 'rgba(255, 255, 255, 0.85)' : saladPalette.navy,
         secondary: mode === 'dark' ? '#b0b0b0' : saladPalette.darkGreen,
       },
-      salad: saladPalette, // custom for direct access
     },
     typography: {
       fontFamily:
         'ui-sans-serif, system-ui, sans-serif, Apple Color Emoji, Segoe UI Emoji, Segoe UI Symbol, Noto Color Emoji',
       fontSize: 14,
-      lineHeight: '20px',
       h1: {
         fontWeight: 700,
         fontSize: 38,
@@ -221,12 +269,14 @@ const createAppTheme = (mode) =>
     },
   });
 
+type TimeWindow = '6h' | '24h' | '7d' | '30d' | '90d' | 'total';
+
 export default function Dashboard() {
   // Initialize theme from localStorage or system preference
 
-  const getInitialTheme = () => {
+  const getInitialTheme = (): 'light' | 'dark' => {
     const saved = localStorage.getItem('theme');
-    if (saved) return saved;
+    if (saved === 'light' || saved === 'dark') return saved;
 
     // Fallback to system preference
     if (typeof window !== 'undefined' && window.matchMedia) {
@@ -236,19 +286,19 @@ export default function Dashboard() {
   };
 
   // Global time window state for all charts - now using plan periods, with persistence
-  const [globalTimeWindow, setGlobalTimeWindow] = useState(() => {
+  const [globalTimeWindow, setGlobalTimeWindow] = useState<TimeWindow>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('timeWindow');
       if (saved && ['6h', '24h', '7d', '30d', '90d', 'total'].includes(saved)) {
-        return saved;
+        return saved as TimeWindow;
       }
     }
     return '7d';
   });
   // Track which time window button is loading
-  const [loadingTimeWindow, setLoadingTimeWindow] = useState(null);
+  const [loadingTimeWindow, setLoadingTimeWindow] = useState<TimeWindow | null>(null);
   // Theme mode state with persistence
-  const [themeMode, setThemeMode] = useState(getInitialTheme);
+  const [themeMode, setThemeMode] = useState<'light' | 'dark'>(getInitialTheme);
 
   // Save time window to localStorage when it changes
   useEffect(() => {
@@ -273,15 +323,19 @@ export default function Dashboard() {
     }
   }, [isLoading]);
   // State for geo node data
-  const [geoData, setGeoData] = useState(undefined);
+  const [geoData, setGeoData] = useState<GeoData | null | undefined>(undefined);
   // State for transactions data
-  const [transactions, setTransactions] = useState(undefined);
+  const [transactions, setTransactions] = useState<Transaction[] | null | undefined>(undefined);
 
   // Fetch transactions on mount
   useEffect(() => {
     let cancelled = false;
     fetch(`${import.meta.env.VITE_STATS_API_URL}/metrics/transactions?limit=10`)
-      .then((res) => (res.ok ? res.json() : Promise.reject('Failed to fetch transactions')))
+      .then((res) =>
+        res.ok
+          ? (res.json() as Promise<{ transactions?: Transaction[] }>)
+          : Promise.reject('Failed to fetch transactions'),
+      )
       .then((data) => {
         if (!cancelled) setTransactions(data.transactions || []);
       })
@@ -298,7 +352,9 @@ export default function Dashboard() {
   useEffect(() => {
     let cancelled = false;
     fetch(`${import.meta.env.VITE_STATS_API_URL}/metrics/geo_counts`)
-      .then((res) => (res.ok ? res.json() : Promise.reject('Failed to fetch geo data')))
+      .then((res) =>
+        res.ok ? (res.json() as Promise<GeoData>) : Promise.reject('Failed to fetch geo data'),
+      )
       .then((data) => {
         if (!cancelled) setGeoData(data);
       })
@@ -310,6 +366,24 @@ export default function Dashboard() {
       cancelled = true;
     };
   }, []); // Only run on mount, not on time window change
+
+  const timeWindowOptions: { key: TimeWindow; label: string }[] = [
+    { key: '6h', label: '6h' },
+    { key: '24h', label: '24h' },
+    { key: '7d', label: '7d' },
+    { key: '30d', label: '30d' },
+    { key: '90d', label: '90d' },
+    { key: 'total', label: 'All' },
+  ];
+
+  const periodLabels: Record<TimeWindow, string> = {
+    '6h': 'last 6 hours',
+    '24h': 'last 24 hours',
+    '7d': 'last 7 days',
+    '30d': 'last 30 days',
+    '90d': 'last 90 days',
+    total: 'all time',
+  };
 
   return (
     <ThemeProvider theme={theme}>
@@ -412,13 +486,13 @@ export default function Dashboard() {
           top: 0,
           left: 0,
           height: 64,
-          bgcolor: theme.palette.salad.navy,
+          bgcolor: (theme.palette as { salad?: { navy?: string } }).salad?.navy || saladPalette.navy,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
           px: 3,
           borderBottom: '4px solid',
-          borderColor: theme.palette.salad.navy,
+          borderColor: (theme.palette as { salad?: { navy?: string } }).salad?.navy || saladPalette.navy,
           zIndex: 1200,
           boxSizing: 'border-box',
         }}
@@ -437,14 +511,7 @@ export default function Dashboard() {
           />
         </a>
         <Box sx={{ display: 'flex', gap: 1, mr: 3, alignItems: 'center' }}>
-          {[
-            { key: '6h', label: '6h' },
-            { key: '24h', label: '24h' },
-            { key: '7d', label: '7d' },
-            { key: '30d', label: '30d' },
-            { key: '90d', label: '90d' },
-            { key: 'total', label: 'All' },
-          ].map((opt) => (
+          {timeWindowOptions.map((opt) => (
             <button
               key={opt.key}
               style={{
@@ -546,14 +613,6 @@ export default function Dashboard() {
             </Typography>
           ) : (
             (() => {
-              const periodLabels = {
-                '6h': 'last 6 hours',
-                '24h': 'last 24 hours',
-                '7d': 'last 7 days',
-                '30d': 'last 30 days',
-                '90d': 'last 90 days',
-                total: 'all time',
-              };
               const periodLabel = periodLabels[globalTimeWindow] || globalTimeWindow;
               const totals = plansData.totals || {};
               return (
@@ -623,7 +682,7 @@ export default function Dashboard() {
                     lineHeight: 1.7,
                   }}
                 >
-                  This page provides summary statistics from SaladCloud’s testing on the Golem
+                  This page provides summary statistics from SaladCloud's testing on the Golem
                   Network. These tests support a broader initiative to evaluate the use of the GLM
                   token for facilitating compute transactions across SaladCloud.
                   <br />
@@ -682,7 +741,7 @@ export default function Dashboard() {
                   Failed to load transactions.
                 </Typography>
               ) : (
-                <TransactionsTable data={transactions} />
+                <TransactionsTable />
               )}
             </Box>
           </StyledPaper>
@@ -697,7 +756,6 @@ export default function Dashboard() {
                       title="Active Unique Nodes"
                       description="Number of SaladCloud providers that ran workloads."
                       trendWindow={globalTimeWindow}
-                      setTrendWindow={() => {}}
                       trendData={transformTimeSeries(plansData.time_series, 'active_nodes')}
                       unit=""
                       unitType="front"
@@ -710,7 +768,6 @@ export default function Dashboard() {
                       title="Fees Paid ($)"
                       description="Fees paid by customers for workloads running on SaladCloud."
                       trendWindow={globalTimeWindow}
-                      setTrendWindow={() => {}}
                       trendData={transformTimeSeries(plansData.time_series, 'total_fees')}
                       unit="$"
                       unitType="front"
@@ -724,7 +781,6 @@ export default function Dashboard() {
                       title="Compute Time (hr)"
                       description="Time customer workloads ran on SaladCloud."
                       trendWindow={globalTimeWindow}
-                      setTrendWindow={() => {}}
                       trendData={transformTimeSeries(plansData.time_series, 'compute_hours')}
                       unit="hours"
                       unitType="below"
@@ -751,7 +807,6 @@ export default function Dashboard() {
                       title="Memory (GB-hr)"
                       description="Aggregated RAM usage across all workloads and provider nodes."
                       trendWindow={globalTimeWindow}
-                      setTrendWindow={() => {}}
                       trendData={transformTimeSeries(plansData.time_series, 'ram_hours')}
                       unit="GB-hr"
                       unitType="below"
@@ -764,7 +819,6 @@ export default function Dashboard() {
                       title="vCPUs (vCPU-hr)"
                       description="Aggregated vCPU usage across all workloads and provider nodes."
                       trendWindow={globalTimeWindow}
-                      setTrendWindow={() => {}}
                       trendData={transformTimeSeries(plansData.time_series, 'core_hours')}
                       unit="CPU-hr"
                       unitType="below"
@@ -777,7 +831,6 @@ export default function Dashboard() {
                       title="GPUs Used by Model"
                       description="Provider nodes running GPU workloads, by model."
                       trendWindow={globalTimeWindow}
-                      setTrendWindow={() => {}}
                       chartData={plansData.active_nodes_by_gpu_model_ts}
                       labels={plansData.active_nodes_by_gpu_model_ts?.labels || []}
                       unit="nodes"
@@ -789,7 +842,6 @@ export default function Dashboard() {
                       title="GPUs Used by VRAM"
                       description="Provider nodes running GPU workloads, by VRAM."
                       trendWindow={globalTimeWindow}
-                      setTrendWindow={() => {}}
                       chartData={plansData.active_nodes_by_vram_ts}
                       labels={plansData.active_nodes_by_vram_ts?.labels || []}
                       unit="nodes"
@@ -801,7 +853,6 @@ export default function Dashboard() {
                       title="GPUs Time by Model (hr)"
                       description="Time GPU customer workloads were running on SaladCloud, by GPU."
                       trendWindow={globalTimeWindow}
-                      setTrendWindow={() => {}}
                       chartData={plansData.gpu_hours_by_model_ts}
                       labels={plansData.gpu_hours_by_model_ts?.labels || []}
                       unit="hours"
@@ -813,7 +864,6 @@ export default function Dashboard() {
                       title="GPUs Time by VRAM (hr)"
                       description="Time GPU customer workloads were running on SaladCloud, by VRAM."
                       trendWindow={globalTimeWindow}
-                      setTrendWindow={() => {}}
                       chartData={plansData.gpu_hours_by_vram_ts}
                       labels={plansData.gpu_hours_by_vram_ts?.labels || []}
                       unit="hours"
@@ -825,7 +875,6 @@ export default function Dashboard() {
                       title="GPU Time (hr)"
                       description="Total GPU compute hours across all workloads."
                       trendWindow={globalTimeWindow}
-                      setTrendWindow={() => {}}
                       trendData={transformTimeSeries(plansData.time_series, 'gpu_hours')}
                       unit="GPU-hrs"
                       unitType="below"

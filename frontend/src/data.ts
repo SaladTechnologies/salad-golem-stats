@@ -1,14 +1,33 @@
 // Data generation functions
 
-export function generateRandomData(numPoints = 100) {
-  const data = [];
+export interface DataPoint {
+  x: number;
+  y: number;
+}
+
+export interface StackedDataset {
+  label: string;
+  data: number[];
+  backgroundColor: string;
+  borderColor: string;
+  borderWidth: number;
+  fill: boolean;
+}
+
+export interface StackedData {
+  labels: number[];
+  datasets: StackedDataset[];
+}
+
+export function generateRandomData(numPoints = 100): DataPoint[] {
+  const data: DataPoint[] = [];
   for (let i = 0; i < numPoints; i++) {
     data.push({ x: i, y: Math.floor(Math.random() * 100) });
   }
   return data;
 }
 
-export function generateStackedData(numPoints = 100, numSeries = 5) {
+export function generateStackedData(numPoints = 100, numSeries = 5): StackedData {
   const colors = [
     'rgba(255, 99, 132, 0.6)',
     'rgba(54, 162, 235, 0.6)',
@@ -24,7 +43,7 @@ export function generateStackedData(numPoints = 100, numSeries = 5) {
     'rgba(153, 102, 255, 1)',
   ];
   const labels = Array.from({ length: numPoints }, (_, i) => i);
-  const datasets = [];
+  const datasets: StackedDataset[] = [];
   for (let s = 0; s < numSeries; s++) {
     const data = Array.from({ length: numPoints }, () => Math.floor(Math.random() * 50 + s * 10));
     datasets.push({

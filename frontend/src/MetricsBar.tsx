@@ -1,8 +1,19 @@
-import React from 'react';
+import { useState, useEffect } from 'react';
 import { Box, Typography, useTheme, Paper } from '@mui/material';
 
+export interface Metric {
+  value: number | null | undefined;
+  unit?: string;
+  unitType?: 'front' | 'after';
+  label: string;
+}
+
+export interface MetricsBarProps {
+  metrics?: Metric[];
+}
+
 // Helper for k/M/B/T formatting
-function formatNumber(num) {
+function formatNumber(num: number | null | undefined): string {
   if (num === null || num === undefined || isNaN(num)) return '-';
   const abs = Math.abs(num);
   if (abs >= 1e12) return (num / 1e12).toFixed(2) + 'T';
@@ -13,34 +24,26 @@ function formatNumber(num) {
 }
 
 // Responsive metrics bar
-export default function MetricsBar({ metrics = [] }) {
+export default function MetricsBar({ metrics = [] }: MetricsBarProps) {
   const theme = useTheme();
-  const [width, setWidth] = React.useState(window.innerWidth);
+  const [width, setWidth] = useState(window.innerWidth);
 
-  React.useEffect(() => {
+  useEffect(() => {
     const handleResize = () => setWidth(window.innerWidth);
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Layout logic
-  let flexDirection = 'row';
-  let wrap = false;
-  let groupSize = metrics.length;
-  if (width < 600) {
-    flexDirection = 'column';
-    wrap = false;
-  } else if (width < 900) {
-    flexDirection = 'row';
-    wrap = true;
-    groupSize = Math.ceil(metrics.length / 2);
-  }
+  // Layout logic (width affects CSS, not JS variable)
+  void width; // Used for responsive CSS via sx prop
 
   // Always use bright green background and navy text in dark mode
   const isDark = theme.palette.mode === 'dark';
   const brightGreen =
-    theme.palette.lime || (theme.palette.salad && theme.palette.salad.lime) || '#B2D530';
-  const navy = (theme.palette.salad && theme.palette.salad.navy) || '#0A2133';
+    (theme.palette as { lime?: string }).lime ||
+    ((theme.palette as { salad?: { lime?: string } }).salad?.lime) ||
+    '#B2D530';
+  const navy = ((theme.palette as { salad?: { navy?: string } }).salad?.navy) || '#0A2133';
   const bg = isDark ? brightGreen : navy;
   const color = isDark ? navy : brightGreen;
 
