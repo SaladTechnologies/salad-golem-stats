@@ -17,6 +17,7 @@ export const config = {
     db: parseInt(process.env.REDIS_DB || '0', 10),
     username: process.env.REDIS_USERNAME || undefined,
     password: process.env.REDIS_PASSWORD || undefined,
+    tls: process.env.REDIS_TLS === 'true',
   },
 
   frontendOrigins: (process.env.FRONTEND_ORIGINS || 'http://localhost:5173').split(','),

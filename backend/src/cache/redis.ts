@@ -11,6 +11,7 @@ export async function initRedis(): Promise<void> {
       socket: {
         host: config.redis.host,
         port: config.redis.port,
+        tls: config.redis.tls,
       },
       database: config.redis.db,
     };
