@@ -52,11 +52,20 @@ export async function ensureTables(): Promise<void> {
     ON glm_transactions(tx_type)
   `);
 
-  // Track import state (last processed block)
+  // Track import state (last processed block) - legacy, kept for compatibility
   await pool.query(`
     CREATE TABLE IF NOT EXISTS import_state (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL,
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )
+  `);
+
+  // Track per-wallet import state
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS wallet_import_state (
+      wallet_address TEXT PRIMARY KEY,
+      last_processed_block BIGINT NOT NULL,
       updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
     )
   `);
@@ -104,6 +113,41 @@ export async function getRequesterWallets(): Promise<string[]> {
     `SELECT DISTINCT to_address FROM glm_transactions WHERE tx_type = 'master_to_requester'`
   );
   return result.rows.map(row => row.to_address.toLowerCase());
+}
+
+export async function getWalletLastProcessedBlock(walletAddress: string): Promise<number | null> {
+  const result = await pool.query(
+    `SELECT last_processed_block FROM wallet_import_state WHERE wallet_address = $1`,
+    [walletAddress.toLowerCase()]
+  );
+  if (result.rows.length === 0) {
+    return null;
+  }
+  return parseInt(result.rows[0].last_processed_block, 10);
+}
+
+export async function setWalletLastProcessedBlock(walletAddress: string, blockNumber: number): Promise<void> {
+  await pool.query(
+    `INSERT INTO wallet_import_state (wallet_address, last_processed_block, updated_at)
+     VALUES ($1, $2, NOW())
+     ON CONFLICT (wallet_address) DO UPDATE SET last_processed_block = $2, updated_at = NOW()`,
+    [walletAddress.toLowerCase(), blockNumber]
+  );
+}
+
+export async function getWalletsLastProcessedBlocks(walletAddresses: string[]): Promise<Map<string, number>> {
+  if (walletAddresses.length === 0) return new Map();
+
+  const result = await pool.query(
+    `SELECT wallet_address, last_processed_block FROM wallet_import_state WHERE wallet_address = ANY($1)`,
+    [walletAddresses.map(w => w.toLowerCase())]
+  );
+
+  const map = new Map<string, number>();
+  for (const row of result.rows) {
+    map.set(row.wallet_address.toLowerCase(), parseInt(row.last_processed_block, 10));
+  }
+  return map;
 }
 
 export async function closePool(): Promise<void> {

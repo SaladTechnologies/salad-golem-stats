@@ -1,7 +1,14 @@
 import { DateTime } from 'luxon';
 import { config } from './config.js';
 import { logger } from './logger.js';
-import { pool, getLastProcessedBlock, setLastProcessedBlock, getRequesterWallets, getExistingTxHashes } from './db.js';
+import {
+  pool,
+  getRequesterWallets,
+  getExistingTxHashes,
+  getWalletLastProcessedBlock,
+  setWalletLastProcessedBlock,
+  getWalletsLastProcessedBlocks,
+} from './db.js';
 import { getAllGlmTransfers, getBlockByTimestamp, TokenTransfer } from './etherscan.js';
 
 // Transaction types for categorization
@@ -101,12 +108,23 @@ async function insertTransactionBatch(transactions: ProcessedTransaction[]): Pro
 /**
  * Import transactions from the master wallet
  * Discovers requester wallets by finding outgoing transfers
+ * Uses per-wallet block tracking
  */
-async function importMasterWalletTransactions(startBlock?: number): Promise<string[]> {
+async function importMasterWalletTransactions(initialLookbackBlock: number): Promise<string[]> {
   const masterWallet = config.masterWallet.toLowerCase();
 
   if (!masterWallet) {
     throw new Error('MASTER_WALLET_ADDRESS not configured');
+  }
+
+  // Get the last processed block for the master wallet
+  let startBlock = await getWalletLastProcessedBlock(masterWallet);
+
+  if (startBlock === null) {
+    startBlock = initialLookbackBlock;
+    logger.info(`Master wallet: first run, starting from block ${startBlock}`);
+  } else {
+    logger.info(`Master wallet: continuing from block ${startBlock}`);
   }
 
   logger.info(`Fetching GLM transfers from master wallet: ${masterWallet}`);
@@ -133,6 +151,13 @@ async function importMasterWalletTransactions(startBlock?: number): Promise<stri
   // Batch insert
   const inserted = await insertTransactionBatch(processed);
 
+  // Update last processed block for master wallet
+  const maxBlock = Math.max(...outgoingTransfers.map(t => parseInt(t.blockNumber, 10)));
+  if (maxBlock > 0) {
+    await setWalletLastProcessedBlock(masterWallet, maxBlock);
+    logger.info(`Master wallet: updated last processed block to ${maxBlock}`);
+  }
+
   // Collect discovered requester wallets
   const discoveredRequesterWallets = new Set(processed.map(t => t.toAddress));
 
@@ -142,14 +167,31 @@ async function importMasterWalletTransactions(startBlock?: number): Promise<stri
 
 /**
  * Import transactions from requester wallets to providers
+ * Uses per-wallet block tracking - new wallets get full lookback
  */
-async function importRequesterWalletTransactions(requesterWallets: string[], startBlock?: number): Promise<void> {
+async function importRequesterWalletTransactions(
+  requesterWallets: string[],
+  initialLookbackBlock: number
+): Promise<void> {
   const masterWallet = config.masterWallet.toLowerCase();
   const requesterSet = new Set(requesterWallets);
   let totalInserted = 0;
 
+  // Get last processed blocks for all requester wallets in one query
+  const walletBlocks = await getWalletsLastProcessedBlocks(requesterWallets);
+
   for (const requesterWallet of requesterWallets) {
-    logger.info(`Fetching GLM transfers from requester wallet: ${requesterWallet}`);
+    // Determine start block for this wallet
+    let startBlock = walletBlocks.get(requesterWallet);
+
+    if (startBlock === undefined) {
+      // New wallet - use full lookback period
+      startBlock = initialLookbackBlock;
+      logger.info(`Requester wallet ${requesterWallet}: new wallet, starting from block ${startBlock}`);
+    } else {
+      logger.info(`Requester wallet ${requesterWallet}: continuing from block ${startBlock}`);
+    }
+
     const transfers = await getAllGlmTransfers(requesterWallet, startBlock);
 
     // Filter to valid provider payments
@@ -167,8 +209,17 @@ async function importRequesterWalletTransactions(requesterWallets: string[], sta
       return true;
     });
 
+    // Update last processed block even if no valid transfers
+    // (we still processed this wallet's transfers from the API)
+    if (transfers.length > 0) {
+      const maxBlock = Math.max(...transfers.map(t => parseInt(t.blockNumber, 10)));
+      if (maxBlock > 0) {
+        await setWalletLastProcessedBlock(requesterWallet, maxBlock);
+      }
+    }
+
     if (validTransfers.length === 0) {
-      logger.info(`Requester wallet ${requesterWallet}: 0 new transactions`);
+      logger.info(`Requester wallet ${requesterWallet}: 0 valid provider payments`);
       continue;
     }
 
@@ -192,45 +243,28 @@ async function importRequesterWalletTransactions(requesterWallets: string[], sta
 
 /**
  * Run a full import cycle
+ * Uses per-wallet block tracking to ensure new wallets get full lookback
  */
 export async function runImport(): Promise<void> {
   logger.info('Starting transaction import cycle');
 
-  // Determine start block
-  let startBlock = await getLastProcessedBlock();
-
-  if (startBlock === null) {
-    // First run: look back N days
-    const lookbackTimestamp = Math.floor(
-      DateTime.now().minus({ days: config.initialLookbackDays }).toSeconds()
-    );
-    startBlock = await getBlockByTimestamp(lookbackTimestamp);
-    logger.info(`First run: starting from block ${startBlock} (${config.initialLookbackDays} days ago)`);
-  } else {
-    // Continue from last processed block
-    logger.info(`Continuing from block ${startBlock}`);
-  }
+  // Calculate the initial lookback block (used for new wallets)
+  const lookbackTimestamp = Math.floor(
+    DateTime.now().minus({ days: config.initialLookbackDays }).toSeconds()
+  );
+  const initialLookbackBlock = await getBlockByTimestamp(lookbackTimestamp);
+  logger.info(`Initial lookback block: ${initialLookbackBlock} (${config.initialLookbackDays} days ago)`);
 
   // Step 1: Import master wallet transactions and discover requester wallets
-  await importMasterWalletTransactions(startBlock);
+  await importMasterWalletTransactions(initialLookbackBlock);
 
   // Step 2: Get all known requester wallets from existing transactions
   const allRequesterWallets = await getRequesterWallets();
   logger.info(`Total known requester wallets: ${allRequesterWallets.length}`);
 
   // Step 3: Import requester wallet transactions to providers
-  await importRequesterWalletTransactions(allRequesterWallets, startBlock);
-
-  // Step 4: Update last processed block
-  const result = await pool.query(
-    `SELECT MAX(block_number) as max_block FROM glm_transactions`
-  );
-  const maxBlock = result.rows[0]?.max_block;
-
-  if (maxBlock) {
-    await setLastProcessedBlock(maxBlock);
-    logger.info(`Updated last processed block to ${maxBlock}`);
-  }
+  // Each wallet uses its own last processed block, or initialLookbackBlock if new
+  await importRequesterWalletTransactions(allRequesterWallets, initialLookbackBlock);
 
   logger.info('Import cycle complete');
 }
