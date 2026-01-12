@@ -53,7 +53,7 @@ export async function transactionsRoutes(fastify: FastifyInstance): Promise<void
       const sortOrder = request.query.sort_order ?? 'desc';
 
       // Count total transactions
-      const totalRow = await queryOne<{ count: string }>('SELECT COUNT(*) as count FROM placeholder_transactions');
+      const totalRow = await queryOne<{ count: string }>('SELECT COUNT(*) as count FROM glm_transactions');
       const total = parseInt(totalRow?.count ?? '0', 10);
 
       // Determine sort column
@@ -68,7 +68,7 @@ export async function transactionsRoutes(fastify: FastifyInstance): Promise<void
       // Build query
       let sql = `
         SELECT ts, provider_wallet, requester_wallet, tx, gpu, ram, vcpus, duration, invoiced_glm, invoiced_dollar
-        FROM placeholder_transactions
+        FROM glm_transactions
       `;
       const params: unknown[] = [];
 
@@ -115,7 +115,7 @@ export async function transactionsRoutes(fastify: FastifyInstance): Promise<void
         if (direction === 'next') {
           // Check if there are older records
           const olderCount = await queryOne<{ count: string }>(
-            'SELECT COUNT(*) as count FROM placeholder_transactions WHERE ts < $1',
+            'SELECT COUNT(*) as count FROM glm_transactions WHERE ts < $1',
             [pageTransactions[pageTransactions.length - 1].ts]
           );
           if (parseInt(olderCount?.count ?? '0', 10) > 0) {
@@ -124,7 +124,7 @@ export async function transactionsRoutes(fastify: FastifyInstance): Promise<void
 
           // Check if there are newer records
           const newerCount = await queryOne<{ count: string }>(
-            'SELECT COUNT(*) as count FROM placeholder_transactions WHERE ts > $1',
+            'SELECT COUNT(*) as count FROM glm_transactions WHERE ts > $1',
             [pageTransactions[0].ts]
           );
           if (parseInt(newerCount?.count ?? '0', 10) > 0) {
@@ -134,7 +134,7 @@ export async function transactionsRoutes(fastify: FastifyInstance): Promise<void
           if (cursor) {
             // Check if there are newer records
             const newerCount = await queryOne<{ count: string }>(
-              'SELECT COUNT(*) as count FROM placeholder_transactions WHERE ts > $1',
+              'SELECT COUNT(*) as count FROM glm_transactions WHERE ts > $1',
               [pageTransactions[0].ts]
             );
             if (parseInt(newerCount?.count ?? '0', 10) > 0) {
@@ -143,7 +143,7 @@ export async function transactionsRoutes(fastify: FastifyInstance): Promise<void
 
             // Check if there are older records
             const olderCount = await queryOne<{ count: string }>(
-              'SELECT COUNT(*) as count FROM placeholder_transactions WHERE ts < $1',
+              'SELECT COUNT(*) as count FROM glm_transactions WHERE ts < $1',
               [pageTransactions[pageTransactions.length - 1].ts]
             );
             if (parseInt(olderCount?.count ?? '0', 10) > 0) {
@@ -152,7 +152,7 @@ export async function transactionsRoutes(fastify: FastifyInstance): Promise<void
           } else {
             // "Last" page - check if there are newer records
             const newerCount = await queryOne<{ count: string }>(
-              'SELECT COUNT(*) as count FROM placeholder_transactions WHERE ts > $1',
+              'SELECT COUNT(*) as count FROM glm_transactions WHERE ts > $1',
               [pageTransactions[0].ts]
             );
             if (parseInt(newerCount?.count ?? '0', 10) > 0) {

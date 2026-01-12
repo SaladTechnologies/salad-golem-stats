@@ -161,35 +161,6 @@ python get_gpu_classes.py
 
 ---
 
-### 4. `generate_placeholder_transactions.py`
-
-**Purpose**: Creates synthetic transaction data for development and testing.
-
-**Usage**:
-```bash
-python generate_placeholder_transactions.py
-```
-
-**What it does**:
-- Generates realistic fake transaction records
-- Creates random but consistent:
-  - Ethereum addresses for providers/requesters
-  - Transaction hashes
-  - GPU assignments from predefined list
-  - Timestamps across specified window
-  - Fee amounts and durations
-- Inserts data into `transactions` table
-- Useful for testing dashboard functionality without real transaction data
-
-**Generated Data**:
-- 103 transactions by default
-- 31-day time window
-- 300 unique provider addresses
-- 10 requester addresses
-- 6 GPU types (RTX 4090, RTX 4080, etc.)
-
----
-
 ### 5. `import_gpu_classes.py`
 
 **Purpose**: Imports GPU class definitions from JSON backup files to PostgreSQL.
@@ -231,46 +202,12 @@ python import_geo_data.py input_file [--clear]
 
 ---
 
-## Data Flow Architecture
-
-```
-┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   SQLite DB     │───▶│  import_plans    │───▶│   PostgreSQL    │
-│   (plans.db)    │    │     _db.py       │    │  (Plan Metrics) │
-└─────────────────┘    └──────────────────┘    └─────────────────┘
-                                                        │
-┌─────────────────┐    ┌──────────────────┐           │
-│   MongoDB       │───▶│   get_geo_       │───────────┤
-│  (Node Data)    │    │     data.py      │           │
-└─────────────────┘    └──────────────────┘           │
-                                                        │
-┌─────────────────┐    ┌──────────────────┐           │
-│   Strapi CMS    │───▶│  get_gpu_        │───────────┤
-│ (GPU Classes)   │    │    classes.py    │           │
-└─────────────────┘    └──────────────────┘           │
-                                                        │
-                       ┌──────────────────┐           │
-                       │   generate_      │───────────┤
-                       │  placeholder     │           │
-                       │ transactions.py  │           │
-                       └──────────────────┘           │
-                                                        ▼
-                                               ┌─────────────────┐
-                                               │   Dashboard     │
-                                               │     API         │
-                                               │  (Backend)      │
-                                               └─────────────────┘
-```
-
 ## Database Schema
 
 ### Tables Populated by Scripts:
 
 - **`city_snapshots`**: Geographic node distribution (from `get_geo_data.py`)
 - **`gpu_classes`**: GPU specifications (from `get_gpu_classes.py`) 
-- **`node_plan`**: Historical plan data (from `import_plans_db.py`)
-- **`node_plan_job`**: Job execution details (from `import_plans_db.py`)
-- **`transactions`**: Payment records (from `generate_placeholder_transactions.py`)
 
 ## Troubleshooting
 
