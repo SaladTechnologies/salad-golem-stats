@@ -9,6 +9,7 @@ export const pool = new Pool({
   database: config.postgres.database,
   user: config.postgres.user,
   password: config.postgres.password,
+  ssl: config.postgres.ssl ? { rejectUnauthorized: false } : false,
 });
 
 export async function query<T = unknown>(

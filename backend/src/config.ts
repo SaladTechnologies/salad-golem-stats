@@ -9,6 +9,7 @@ export const config = {
     database: process.env.POSTGRES_DB || 'statsdb',
     user: process.env.POSTGRES_USER || 'devuser',
     password: process.env.POSTGRES_PASSWORD || 'devpass',
+    ssl: process.env.POSTGRES_SSL === 'true',
   },
 
   redis: {
