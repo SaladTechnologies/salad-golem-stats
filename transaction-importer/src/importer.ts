@@ -203,8 +203,8 @@ async function importRequesterWalletTransactions(
       if (from !== requesterWallet) return false;
       // Skip refunds to master
       if (to === masterWallet) return false;
-      // Skip internal transfers to other requesters
-      if (requesterSet.has(to)) return false;
+      // // Skip internal transfers to other requesters
+      // if (requesterSet.has(to)) return false;
 
       return true;
     });
