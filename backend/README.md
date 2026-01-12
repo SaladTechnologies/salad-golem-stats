@@ -77,6 +77,8 @@ Configure connections via environment variables below.
 | `REDIS_HOST` | `localhost` | Redis host |
 | `REDIS_PORT` | `6379` | Redis port |
 | `REDIS_DB` | `0` | Redis database |
+| `REDIS_USERNAME` | _(empty)_ | Redis username (optional) |
+| `REDIS_PASSWORD` | _(empty)_ | Redis password (optional) |
 | `FRONTEND_ORIGINS` | `http://localhost:5173` | CORS allowed origins (comma-separated) |
 | `CACHE_TTL_GEO` | `86400` | Geo endpoint cache TTL (seconds) |
 | `CACHE_TTL_TRANSACTIONS` | `60` | Transactions endpoint cache TTL |

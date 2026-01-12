@@ -7,13 +7,21 @@ let redisClient: RedisClientType | null = null;
 
 export async function initRedis(): Promise<void> {
   try {
-    redisClient = createClient({
+    const redisConfig: any = {
       socket: {
         host: config.redis.host,
         port: config.redis.port,
       },
       database: config.redis.db,
-    });
+    };
+
+    // Add credentials if provided
+    if (config.redis.username || config.redis.password) {
+      redisConfig.username = config.redis.username;
+      redisConfig.password = config.redis.password;
+    }
+
+    redisClient = createClient(redisConfig);
 
     redisClient.on('error', (err) => {
       console.error('Redis error:', err);
