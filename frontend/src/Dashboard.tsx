@@ -375,7 +375,7 @@ export default function Dashboard() {
     { key: '24h', label: '24h' },
     { key: '7d', label: '7d' },
     { key: '30d', label: '30d' },
-    { key: '90d', label: '90d' },
+    // { key: '90d', label: '90d' },
     { key: 'total', label: 'All' },
   ];
 
@@ -696,9 +696,11 @@ export default function Dashboard() {
                   run workloads including text-to-image, text-to-video, molecular simulations, and
                   zero-knowledge proofs. SaladCloud nodes are worldwide, as seen in the distribution
                   of daily active SaladCloud nodes in the globe to the right in the full network.
-                  The data presented represents a subset of participating customers (requestors) and
-                  network nodes (providers), and includes test compute transactions executed
-                  on-chain using GLM.
+                  <Box component="span" sx={{ fontWeight: 'bold' }}>
+                    {' '}The data presented represents only a subset of participating customers
+                    (requestors) and network nodes (providers), and includes test compute
+                    transactions executed on-chain using GLM.
+                  </Box>
                 </Typography>
               </Paper>
             </Grid>
