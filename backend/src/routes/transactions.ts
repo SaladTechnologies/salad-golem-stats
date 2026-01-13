@@ -2,6 +2,7 @@ import { FastifyInstance } from "fastify";
 import { query, queryOne } from "../db/connection.js";
 import { createCacheHooks } from "../cache/redis.js";
 import { Transaction, TransactionsResponse } from "../types/index.js";
+import { config } from "../config.js";
 
 interface TransactionsQuery {
   limit?: number;
@@ -53,11 +54,12 @@ export async function transactionsRoutes(
 
       // Only show requester-to-provider transactions (not master-to-requester funding)
       const txTypeFilter = "requester_to_provider";
+      const minDate = config.transactionsMinDate;
 
       // Count total transactions
       const totalRow = await queryOne<{ count: string }>(
-        "SELECT COUNT(*) as count FROM glm_transactions WHERE tx_type = $1",
-        [txTypeFilter]
+        "SELECT COUNT(*) as count FROM glm_transactions WHERE tx_type = $1 AND block_timestamp >= $2",
+        [txTypeFilter, minDate]
       );
       const total = parseInt(totalRow?.count ?? "0", 10);
 
@@ -86,18 +88,18 @@ export async function transactionsRoutes(
       let sql = `
         SELECT tx_hash, block_number, block_timestamp, from_address, to_address, value_glm, tx_type
         FROM glm_transactions
-        WHERE tx_type = $1
+        WHERE tx_type = $1 AND block_timestamp >= $2
       `;
-      const params: unknown[] = [txTypeFilter];
+      const params: unknown[] = [txTypeFilter, minDate];
 
       if (direction === "next") {
         if (cursor) {
-          sql += ` AND ${sortColumn} < $2`;
+          sql += ` AND ${sortColumn} < $3`;
           params.push(cursor);
         }
       } else {
         if (cursor) {
-          sql += ` AND ${sortColumn} > $2`;
+          sql += ` AND ${sortColumn} > $3`;
           params.push(cursor);
         }
       }
@@ -141,8 +143,8 @@ export async function transactionsRoutes(
         if (direction === "next") {
           // Check if there are older records
           const olderCount = await queryOne<{ count: string }>(
-            `SELECT COUNT(*) as count FROM glm_transactions WHERE tx_type = $1 AND ${sortColumn} < $2`,
-            [txTypeFilter, lastCursor]
+            `SELECT COUNT(*) as count FROM glm_transactions WHERE tx_type = $1 AND block_timestamp >= $2 AND ${sortColumn} < $3`,
+            [txTypeFilter, minDate, lastCursor]
           );
           if (parseInt(olderCount?.count ?? "0", 10) > 0) {
             nextCursor = lastCursor;
@@ -150,8 +152,8 @@ export async function transactionsRoutes(
 
           // Check if there are newer records
           const newerCount = await queryOne<{ count: string }>(
-            `SELECT COUNT(*) as count FROM glm_transactions WHERE tx_type = $1 AND ${sortColumn} > $2`,
-            [txTypeFilter, firstCursor]
+            `SELECT COUNT(*) as count FROM glm_transactions WHERE tx_type = $1 AND block_timestamp >= $2 AND ${sortColumn} > $3`,
+            [txTypeFilter, minDate, firstCursor]
           );
           if (parseInt(newerCount?.count ?? "0", 10) > 0) {
             prevCursor = firstCursor;
@@ -160,8 +162,8 @@ export async function transactionsRoutes(
           if (cursor) {
             // Check if there are newer records
             const newerCount = await queryOne<{ count: string }>(
-              `SELECT COUNT(*) as count FROM glm_transactions WHERE tx_type = $1 AND ${sortColumn} > $2`,
-              [txTypeFilter, firstCursor]
+              `SELECT COUNT(*) as count FROM glm_transactions WHERE tx_type = $1 AND block_timestamp >= $2 AND ${sortColumn} > $3`,
+              [txTypeFilter, minDate, firstCursor]
             );
             if (parseInt(newerCount?.count ?? "0", 10) > 0) {
               prevCursor = firstCursor;
@@ -169,8 +171,8 @@ export async function transactionsRoutes(
 
             // Check if there are older records
             const olderCount = await queryOne<{ count: string }>(
-              `SELECT COUNT(*) as count FROM glm_transactions WHERE tx_type = $1 AND ${sortColumn} < $2`,
-              [txTypeFilter, lastCursor]
+              `SELECT COUNT(*) as count FROM glm_transactions WHERE tx_type = $1 AND block_timestamp >= $2 AND ${sortColumn} < $3`,
+              [txTypeFilter, minDate, lastCursor]
             );
             if (parseInt(olderCount?.count ?? "0", 10) > 0) {
               nextCursor = lastCursor;
@@ -178,8 +180,8 @@ export async function transactionsRoutes(
           } else {
             // "Last" page - check if there are newer records
             const newerCount = await queryOne<{ count: string }>(
-              `SELECT COUNT(*) as count FROM glm_transactions WHERE tx_type = $1 AND ${sortColumn} > $2`,
-              [txTypeFilter, firstCursor]
+              `SELECT COUNT(*) as count FROM glm_transactions WHERE tx_type = $1 AND block_timestamp >= $2 AND ${sortColumn} > $3`,
+              [txTypeFilter, minDate, firstCursor]
             );
             if (parseInt(newerCount?.count ?? "0", 10) > 0) {
               prevCursor = firstCursor;

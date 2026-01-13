@@ -33,6 +33,10 @@ export const config = {
     enabled: process.env.CACHE_WARMER_ENABLED !== 'false', // Enabled by default
     intervalRatio: parseFloat(process.env.CACHE_WARMER_INTERVAL_RATIO || '0.8'), // Warm at 80% of TTL
   },
+
+  // Minimum date for queried transactions (ISO 8601 format)
+  // Transactions before this date will not be returned
+  transactionsMinDate: process.env.TRANSACTIONS_MIN_DATE || '2026-01-01T00:00:00.000Z',
 } as const;
 
 export type CacheKey = keyof typeof config.cacheTtl;
