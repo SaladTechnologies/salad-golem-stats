@@ -135,8 +135,9 @@ export async function getPlanStats(period: PlanPeriod): Promise<PlanStatsRespons
   const cutoffMs = toEpochMs(cutoff);
   const startMs = rangeStart ? toEpochMs(rangeStart) : null;
 
-  // Build WHERE clause for time range - include running jobs
-  const timeWhere = startMs
+  // Build WHERE clause for time range
+  // Use overlap logic for all metrics, but allocate fees proportionally
+  const timeWhereForOverlap = startMs
     ? 'start_at < $1 AND (stop_at IS NULL OR stop_at >= $2)'
     : 'start_at < $1';
   const timeParams = startMs ? [cutoffMs, startMs] : [cutoffMs];
@@ -144,7 +145,27 @@ export async function getPlanStats(period: PlanPeriod): Promise<PlanStatsRespons
   // 1. Get totals
   // Active nodes uses overlap logic: nodes running at any point during the range
   // All metrics sum across jobs in the time range
-  const totalsQuery = `
+  const totalsQuery = startMs
+    ? `
+    SELECT
+      -- Fees: allocated proportionally based on overlap time
+      COALESCE(SUM(
+        invoice_amount * 
+        GREATEST(0, LEAST(COALESCE(stop_at, $1), $1) - GREATEST(start_at, $2)) / 
+        GREATEST(1, COALESCE(stop_at, $1) - start_at)
+      ), 0) as total_fees,
+      COALESCE(SUM((COALESCE(stop_at, $1) - start_at) / 1000.0 / 3600.0), 0) as compute_hours,
+      COALESCE(SUM(cpu * (COALESCE(stop_at, $1) - start_at) / 1000.0 / 3600.0), 0) as core_hours,
+      COALESCE(SUM(ram * (COALESCE(stop_at, $1) - start_at) / 1000.0 / 3600.0 / 1024.0), 0) as ram_hours,
+      COALESCE(SUM(
+        CASE WHEN gpu_class_id IS NOT NULL AND gpu_class_id != ''
+        THEN (COALESCE(stop_at, $1) - start_at) / 1000.0 / 3600.0
+        ELSE 0 END
+      ), 0) as gpu_hours
+    FROM node_plan
+    WHERE ${timeWhereForOverlap}
+  `
+    : `
     SELECT
       COALESCE(SUM(invoice_amount), 0) as total_fees,
       COALESCE(SUM((COALESCE(stop_at, $1) - start_at) / 1000.0 / 3600.0), 0) as compute_hours,
@@ -156,7 +177,7 @@ export async function getPlanStats(period: PlanPeriod): Promise<PlanStatsRespons
         ELSE 0 END
       ), 0) as gpu_hours
     FROM node_plan
-    WHERE ${timeWhere}
+    WHERE ${timeWhereForOverlap}
   `;
 
   // Active nodes: count nodes that were running at any point during the range
@@ -164,12 +185,12 @@ export async function getPlanStats(period: PlanPeriod): Promise<PlanStatsRespons
     ? `
     SELECT COUNT(DISTINCT node_id) as active_nodes
     FROM node_plan
-    WHERE start_at < $1 AND (stop_at IS NULL OR stop_at >= $2)
+    WHERE ${timeWhereForOverlap.replace('$1', '$1').replace('$2', '$2')}
   `
     : `
     SELECT COUNT(DISTINCT node_id) as active_nodes
     FROM node_plan
-    WHERE start_at < $1
+    WHERE ${timeWhereForOverlap}
   `;
 
   // 2. Get time series
@@ -287,7 +308,7 @@ export async function getPlanStats(period: PlanPeriod): Promise<PlanStatsRespons
       COALESCE(SUM((COALESCE(np.stop_at, $1) - np.start_at) / 1000.0 / 3600.0), 0) as value
     FROM node_plan np
     LEFT JOIN gpu_classes gc ON np.gpu_class_id = gc.gpu_class_id
-    WHERE ${timeWhere}
+    WHERE ${timeWhereForOverlap}
       AND np.gpu_class_id IS NOT NULL AND np.gpu_class_id != ''
     GROUP BY gc.gpu_class_name
     ORDER BY value DESC
@@ -300,7 +321,7 @@ export async function getPlanStats(period: PlanPeriod): Promise<PlanStatsRespons
       COALESCE(SUM((COALESCE(np.stop_at, $1) - np.start_at) / 1000.0 / 3600.0), 0) as value
     FROM node_plan np
     LEFT JOIN gpu_classes gc ON np.gpu_class_id = gc.gpu_class_id
-    WHERE ${timeWhere}
+    WHERE ${timeWhereForOverlap}
       AND np.gpu_class_id IS NOT NULL AND np.gpu_class_id != ''
     GROUP BY gc.vram_gb
     ORDER BY gc.vram_gb
@@ -314,7 +335,7 @@ export async function getPlanStats(period: PlanPeriod): Promise<PlanStatsRespons
       COUNT(DISTINCT np.node_id)::text as value
     FROM node_plan np
     LEFT JOIN gpu_classes gc ON np.gpu_class_id = gc.gpu_class_id
-    WHERE np.start_at < $1 AND (np.stop_at IS NULL OR np.stop_at >= $2)
+    WHERE ${timeWhereForOverlap.replace('$1', '$1').replace('$2', '$2')}
     GROUP BY gc.gpu_class_name
     ORDER BY value DESC
   `
@@ -324,7 +345,7 @@ export async function getPlanStats(period: PlanPeriod): Promise<PlanStatsRespons
       COUNT(DISTINCT np.node_id)::text as value
     FROM node_plan np
     LEFT JOIN gpu_classes gc ON np.gpu_class_id = gc.gpu_class_id
-    WHERE np.start_at < $1
+    WHERE ${timeWhereForOverlap}
     GROUP BY gc.gpu_class_name
     ORDER BY value DESC
   `;
@@ -337,7 +358,7 @@ export async function getPlanStats(period: PlanPeriod): Promise<PlanStatsRespons
       COUNT(DISTINCT np.node_id)::text as value
     FROM node_plan np
     LEFT JOIN gpu_classes gc ON np.gpu_class_id = gc.gpu_class_id
-    WHERE np.start_at < $1 AND (np.stop_at IS NULL OR np.stop_at >= $2)
+    WHERE ${timeWhereForOverlap.replace('$1', '$1').replace('$2', '$2')}
     GROUP BY gc.vram_gb
     ORDER BY gc.vram_gb NULLS FIRST
   `
@@ -347,7 +368,7 @@ export async function getPlanStats(period: PlanPeriod): Promise<PlanStatsRespons
       COUNT(DISTINCT np.node_id)::text as value
     FROM node_plan np
     LEFT JOIN gpu_classes gc ON np.gpu_class_id = gc.gpu_class_id
-    WHERE np.start_at < $1
+    WHERE ${timeWhereForOverlap}
     GROUP BY gc.vram_gb
     ORDER BY gc.vram_gb NULLS FIRST
   `;
