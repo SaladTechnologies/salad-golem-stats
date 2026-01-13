@@ -1,5 +1,6 @@
 import { getPlanStats } from './planMetrics.js';
 import { query } from '../db/connection.js';
+import { config } from '../config.js';
 
 interface NetworkStatsResponse {
   timestamp: string;
@@ -227,14 +228,38 @@ export async function getGolemHistoricalStats(): Promise<HistoricalStatsResponse
     }
   }
 
-  // Get utilization data (30-second intervals for last 6 hours)
-  // We'll sample from our time series data
-  const utilization: Array<[number, number]> = stats30d.time_series
-    .slice(-72) // Last 6 hours worth of hourly data (if available)
-    .map((point) => [
-      Math.floor(new Date(point.timestamp).getTime() / 1000),
-      point.active_nodes,
-    ]);
+  // Get utilization data at configured granularity (default: 30-second intervals for last 6 hours)
+  const granularitySeconds = config.golemUtilizationGranularitySeconds;
+  const utilizationHours = 6;
+  const utilizationResult = await query<{
+    bucket: Date;
+    computing_nodes: string;
+  }>(
+    `
+    WITH time_buckets AS (
+      SELECT generate_series(
+        NOW() - INTERVAL '${utilizationHours} hours',
+        NOW(),
+        INTERVAL '${granularitySeconds} seconds'
+      ) as bucket
+    )
+    SELECT
+      b.bucket,
+      COUNT(DISTINCT np.node_id)::text as computing_nodes
+    FROM time_buckets b
+    LEFT JOIN node_plan np ON
+      np.start_at < (EXTRACT(EPOCH FROM (b.bucket + INTERVAL '${granularitySeconds} seconds')) * 1000)
+      AND (np.stop_at IS NULL OR np.stop_at >= (EXTRACT(EPOCH FROM b.bucket) * 1000))
+    GROUP BY b.bucket
+    ORDER BY b.bucket
+  `,
+    []
+  );
+
+  const utilization: Array<[number, number]> = utilizationResult.map((row) => [
+    Math.floor(row.bucket.getTime() / 1000),
+    parseInt(row.computing_nodes, 10),
+  ]);
 
   // Get daily computing totals
   const computingDaily = stats30d.time_series

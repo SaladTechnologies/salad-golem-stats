@@ -42,6 +42,9 @@ export const config = {
 
   // Golem integration API token for authentication
   golemApiToken: process.env.GOLEM_API_TOKEN || '',
+
+  // Golem utilization data granularity in seconds (default: 30s as per spec)
+  golemUtilizationGranularitySeconds: parseInt(process.env.GOLEM_UTILIZATION_GRANULARITY_SECONDS || '30', 10),
 } as const;
 
 export type CacheKey = keyof typeof config.cacheTtl;
