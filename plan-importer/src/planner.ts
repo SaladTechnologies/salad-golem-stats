@@ -50,6 +50,17 @@ export async function importPlans(): Promise<void> {
     logger.info(`Processing file: ${jsonFile}`);
     const jsonFilePath = path.join(pendingDir, jsonFile);
 
+    // Check if file was already imported (handles container restart with wiped data directory)
+    const existingFile = await pool.query(
+      'SELECT id FROM json_import_file WHERE file_name = $1',
+      [jsonFile]
+    );
+    if (existingFile.rows.length > 0) {
+      logger.info(`${jsonFile} was already imported (found in database), moving to imported folder`);
+      await fs.rename(jsonFilePath, path.join(importedDir, jsonFile));
+      continue;
+    }
+
     // Parse JSON
     let jsonData: MixpanelRow[];
     try {

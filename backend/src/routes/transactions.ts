@@ -1,45 +1,45 @@
-import { FastifyInstance } from 'fastify';
-import { query, queryOne } from '../db/connection.js';
-import { createCacheHooks } from '../cache/redis.js';
-import { Transaction, TransactionsResponse } from '../types/index.js';
+import { FastifyInstance } from "fastify";
+import { query, queryOne } from "../db/connection.js";
+import { createCacheHooks } from "../cache/redis.js";
+import { Transaction, TransactionsResponse } from "../types/index.js";
+import { config } from "../config.js";
 
 interface TransactionsQuery {
   limit?: number;
   cursor?: string;
-  direction?: 'next' | 'prev';
-  sort_by?: 'time' | 'glm' | 'usd';
-  sort_order?: 'asc' | 'desc';
+  direction?: "next" | "prev";
+  sort_by?: "time" | "glm" | "block";
+  sort_order?: "asc" | "desc";
 }
 
 interface TransactionRow {
-  ts: Date;
-  provider_wallet: string;
-  requester_wallet: string;
-  tx: string;
-  gpu: string;
-  ram: number;
-  vcpus: number;
-  duration: string;
-  invoiced_glm: string | number;
-  invoiced_dollar: string | number;
+  tx_hash: string;
+  block_number: string | number;
+  block_timestamp: Date;
+  from_address: string;
+  to_address: string;
+  value_glm: string | number;
+  tx_type: string;
 }
 
 const transactionsQuerySchema = {
-  type: 'object',
+  type: "object",
   properties: {
-    limit: { type: 'integer', minimum: 1, maximum: 100, default: 10 },
-    cursor: { type: 'string' },
-    direction: { type: 'string', enum: ['next', 'prev'], default: 'next' },
-    sort_by: { type: 'string', enum: ['time', 'glm', 'usd'], default: 'time' },
-    sort_order: { type: 'string', enum: ['asc', 'desc'], default: 'desc' },
+    limit: { type: "integer", minimum: 1, maximum: 100, default: 10 },
+    cursor: { type: "string" },
+    direction: { type: "string", enum: ["next", "prev"], default: "next" },
+    sort_by: { type: "string", enum: ["time", "glm", "block"], default: "time" },
+    sort_order: { type: "string", enum: ["asc", "desc"], default: "desc" },
   },
 };
 
-export async function transactionsRoutes(fastify: FastifyInstance): Promise<void> {
-  const cacheHooks = createCacheHooks('transactions');
+export async function transactionsRoutes(
+  fastify: FastifyInstance
+): Promise<void> {
+  const cacheHooks = createCacheHooks("transactions");
 
   fastify.get<{ Querystring: TransactionsQuery }>(
-    '/metrics/transactions',
+    "/metrics/transactions",
     {
       schema: { querystring: transactionsQuerySchema },
       preHandler: cacheHooks.preHandler,
@@ -48,38 +48,58 @@ export async function transactionsRoutes(fastify: FastifyInstance): Promise<void
     async (request) => {
       const limit = request.query.limit ?? 10;
       const cursor = request.query.cursor;
-      const direction = request.query.direction ?? 'next';
-      const sortBy = request.query.sort_by ?? 'time';
-      const sortOrder = request.query.sort_order ?? 'desc';
+      const direction = request.query.direction ?? "next";
+      const sortBy = request.query.sort_by ?? "time";
+      const sortOrder = request.query.sort_order ?? "desc";
+
+      // Only show requester-to-provider transactions (not master-to-requester funding)
+      const txTypeFilter = "requester_to_provider";
+      const minDate = config.transactionsMinDate;
 
       // Count total transactions
-      const totalRow = await queryOne<{ count: string }>('SELECT COUNT(*) as count FROM glm_transactions');
-      const total = parseInt(totalRow?.count ?? '0', 10);
+      const totalRow = await queryOne<{ count: string }>(
+        "SELECT COUNT(*) as count FROM glm_transactions WHERE tx_type = $1 AND block_timestamp >= $2",
+        [txTypeFilter, minDate]
+      );
+      const total = parseInt(totalRow?.count ?? "0", 10);
 
       // Determine sort column
       const sortColumnMap: Record<string, string> = {
-        time: 'ts',
-        glm: 'invoiced_glm',
-        usd: 'invoiced_dollar',
+        time: "block_timestamp",
+        glm: "value_glm",
+        block: "block_number",
       };
       const sortColumn = sortColumnMap[sortBy];
       const order = sortOrder.toUpperCase();
 
+      // Helper to get cursor value from a transaction based on sort column
+      const getCursorValue = (t: Transaction): string => {
+        switch (sortBy) {
+          case "glm":
+            return String(t.value_glm);
+          case "block":
+            return String(t.block_number);
+          default:
+            return t.block_timestamp;
+        }
+      };
+
       // Build query
       let sql = `
-        SELECT ts, provider_wallet, requester_wallet, tx, gpu, ram, vcpus, duration, invoiced_glm, invoiced_dollar
+        SELECT tx_hash, block_number, block_timestamp, from_address, to_address, value_glm, tx_type
         FROM glm_transactions
+        WHERE tx_type = $1 AND block_timestamp >= $2
       `;
-      const params: unknown[] = [];
+      const params: unknown[] = [txTypeFilter, minDate];
 
-      if (direction === 'next') {
+      if (direction === "next") {
         if (cursor) {
-          sql += ` WHERE ${sortColumn} < $1`;
+          sql += ` AND ${sortColumn} < $3`;
           params.push(cursor);
         }
       } else {
         if (cursor) {
-          sql += ` WHERE ${sortColumn} > $1`;
+          sql += ` AND ${sortColumn} > $3`;
           params.push(cursor);
         }
       }
@@ -90,21 +110,24 @@ export async function transactionsRoutes(fastify: FastifyInstance): Promise<void
       let rows = await query<TransactionRow>(sql, params);
 
       // Always return newest first for UI consistency
-      if (direction === 'prev') {
+      if (direction === "prev") {
         rows = rows.reverse();
       }
 
       const pageTransactions: Transaction[] = rows.map((r) => ({
-        ts: r.ts instanceof Date ? r.ts.toISOString() : String(r.ts),
-        provider_wallet: r.provider_wallet,
-        requester_wallet: r.requester_wallet,
-        tx: r.tx,
-        gpu: r.gpu,
-        ram: r.ram,
-        vcpus: r.vcpus,
-        duration: String(r.duration),
-        invoiced_glm: parseFloat(String(r.invoiced_glm)),
-        invoiced_dollar: parseFloat(String(r.invoiced_dollar)),
+        tx_hash: r.tx_hash,
+        block_number:
+          typeof r.block_number === "string"
+            ? parseInt(r.block_number, 10)
+            : r.block_number,
+        block_timestamp:
+          r.block_timestamp instanceof Date
+            ? r.block_timestamp.toISOString()
+            : String(r.block_timestamp),
+        from_address: r.from_address,
+        to_address: r.to_address,
+        value_glm: parseFloat(String(r.value_glm)),
+        tx_type: r.tx_type,
       }));
 
       // Determine cursors for navigation
@@ -112,51 +135,56 @@ export async function transactionsRoutes(fastify: FastifyInstance): Promise<void
       let prevCursor: string | null = null;
 
       if (pageTransactions.length > 0) {
-        if (direction === 'next') {
+        const firstCursor = getCursorValue(pageTransactions[0]);
+        const lastCursor = getCursorValue(
+          pageTransactions[pageTransactions.length - 1]
+        );
+
+        if (direction === "next") {
           // Check if there are older records
           const olderCount = await queryOne<{ count: string }>(
-            'SELECT COUNT(*) as count FROM glm_transactions WHERE ts < $1',
-            [pageTransactions[pageTransactions.length - 1].ts]
+            `SELECT COUNT(*) as count FROM glm_transactions WHERE tx_type = $1 AND block_timestamp >= $2 AND ${sortColumn} < $3`,
+            [txTypeFilter, minDate, lastCursor]
           );
-          if (parseInt(olderCount?.count ?? '0', 10) > 0) {
-            nextCursor = pageTransactions[pageTransactions.length - 1].ts;
+          if (parseInt(olderCount?.count ?? "0", 10) > 0) {
+            nextCursor = lastCursor;
           }
 
           // Check if there are newer records
           const newerCount = await queryOne<{ count: string }>(
-            'SELECT COUNT(*) as count FROM glm_transactions WHERE ts > $1',
-            [pageTransactions[0].ts]
+            `SELECT COUNT(*) as count FROM glm_transactions WHERE tx_type = $1 AND block_timestamp >= $2 AND ${sortColumn} > $3`,
+            [txTypeFilter, minDate, firstCursor]
           );
-          if (parseInt(newerCount?.count ?? '0', 10) > 0) {
-            prevCursor = pageTransactions[0].ts;
+          if (parseInt(newerCount?.count ?? "0", 10) > 0) {
+            prevCursor = firstCursor;
           }
         } else {
           if (cursor) {
             // Check if there are newer records
             const newerCount = await queryOne<{ count: string }>(
-              'SELECT COUNT(*) as count FROM glm_transactions WHERE ts > $1',
-              [pageTransactions[0].ts]
+              `SELECT COUNT(*) as count FROM glm_transactions WHERE tx_type = $1 AND block_timestamp >= $2 AND ${sortColumn} > $3`,
+              [txTypeFilter, minDate, firstCursor]
             );
-            if (parseInt(newerCount?.count ?? '0', 10) > 0) {
-              prevCursor = pageTransactions[0].ts;
+            if (parseInt(newerCount?.count ?? "0", 10) > 0) {
+              prevCursor = firstCursor;
             }
 
             // Check if there are older records
             const olderCount = await queryOne<{ count: string }>(
-              'SELECT COUNT(*) as count FROM glm_transactions WHERE ts < $1',
-              [pageTransactions[pageTransactions.length - 1].ts]
+              `SELECT COUNT(*) as count FROM glm_transactions WHERE tx_type = $1 AND block_timestamp >= $2 AND ${sortColumn} < $3`,
+              [txTypeFilter, minDate, lastCursor]
             );
-            if (parseInt(olderCount?.count ?? '0', 10) > 0) {
-              nextCursor = pageTransactions[pageTransactions.length - 1].ts;
+            if (parseInt(olderCount?.count ?? "0", 10) > 0) {
+              nextCursor = lastCursor;
             }
           } else {
             // "Last" page - check if there are newer records
             const newerCount = await queryOne<{ count: string }>(
-              'SELECT COUNT(*) as count FROM glm_transactions WHERE ts > $1',
-              [pageTransactions[0].ts]
+              `SELECT COUNT(*) as count FROM glm_transactions WHERE tx_type = $1 AND block_timestamp >= $2 AND ${sortColumn} > $3`,
+              [txTypeFilter, minDate, firstCursor]
             );
-            if (parseInt(newerCount?.count ?? '0', 10) > 0) {
-              prevCursor = pageTransactions[0].ts;
+            if (parseInt(newerCount?.count ?? "0", 10) > 0) {
+              prevCursor = firstCursor;
             }
           }
         }

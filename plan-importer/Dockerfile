@@ -18,6 +18,5 @@ COPY package*.json ./
 RUN npm ci --omit=dev
 
 COPY --from=builder /app/dist ./dist
-COPY jql ./jql
 
 CMD ["node", "dist/index.js"]

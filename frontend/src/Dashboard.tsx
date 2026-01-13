@@ -49,12 +49,13 @@ interface PlansMetricsData {
 }
 
 interface Transaction {
-  ts?: string;
-  provider_wallet?: string;
-  requester_wallet?: string;
-  tx?: string;
-  invoiced_glm?: number;
-  invoiced_dollar?: number;
+  tx_hash?: string;
+  block_number?: number;
+  block_timestamp?: string;
+  from_address?: string;
+  to_address?: string;
+  value_glm?: number;
+  tx_type?: string;
 }
 
 // Hook for fetching plan metrics from the new /metrics/plans endpoint

@@ -27,12 +27,13 @@ import {
 } from '@mui/material';
 
 export interface Transaction {
-  ts?: string;
-  provider_wallet?: string;
-  requester_wallet?: string;
-  tx?: string;
-  invoiced_glm?: number;
-  invoiced_dollar?: number;
+  tx_hash?: string;
+  block_number?: number;
+  block_timestamp?: string;
+  from_address?: string;
+  to_address?: string;
+  value_glm?: number;
+  tx_type?: string;
 }
 
 interface SortableHeaderProps {
@@ -188,7 +189,7 @@ export default function TransactionsTable() {
   const columns: ColumnDef<Transaction>[] = useMemo(
     () => [
       {
-        accessorKey: 'ts',
+        accessorKey: 'block_timestamp',
         header: () => (
           <SortableHeader
             label="Timestamp (UTC)"
@@ -201,35 +202,35 @@ export default function TransactionsTable() {
         ),
         cell: (info: CellContext<Transaction, unknown>) => {
           const value = info.getValue() as string | undefined;
-          return value ? String(value).replace('T', ' ') : '';
+          return value ? String(value).replace('T', ' ').replace('Z', '') : '';
         },
       },
       {
-        accessorKey: 'provider_wallet',
-        header: 'Provider Wallet',
+        accessorKey: 'from_address',
+        header: 'From',
         cell: (info: CellContext<Transaction, unknown>) => {
           const v = info.getValue() as string | undefined;
-          return v ? String(v).slice(0, 8) + '...' : '';
+          return v ? String(v).slice(0, 10) + '...' : '';
         },
       },
       {
-        accessorKey: 'requester_wallet',
-        header: 'Requester Wallet',
+        accessorKey: 'to_address',
+        header: 'To',
         cell: (info: CellContext<Transaction, unknown>) => {
           const v = info.getValue() as string | undefined;
-          return v ? String(v).slice(0, 8) + '...' : '';
+          return v ? String(v).slice(0, 10) + '...' : '';
         },
       },
       {
-        accessorKey: 'tx',
+        accessorKey: 'tx_hash',
         header: 'Transaction Hash',
         cell: (info: CellContext<Transaction, unknown>) => {
           const v = info.getValue() as string | undefined;
           if (!v) return '';
-          const short = String(v).slice(0, 8) + '...';
+          const short = String(v).slice(0, 10) + '...';
           return (
             <a
-              href={`https://polygonscan.com/tx/${v}`}
+              href={`https://etherscan.io/tx/${v}`}
               target="_blank"
               rel="noopener noreferrer"
               style={{ color: '#1976d2', textDecoration: 'underline' }}
@@ -240,7 +241,7 @@ export default function TransactionsTable() {
         },
       },
       {
-        accessorKey: 'invoiced_glm',
+        accessorKey: 'value_glm',
         header: () => (
           <SortableHeader
             label="GLM"
@@ -251,22 +252,9 @@ export default function TransactionsTable() {
             setSortOrder={setSortOrder}
           />
         ),
-      },
-      {
-        accessorKey: 'invoiced_dollar',
-        header: () => (
-          <SortableHeader
-            label="USD"
-            sortKey="usd"
-            sortBy={sortBy}
-            sortOrder={sortOrder}
-            setSortBy={setSortBy}
-            setSortOrder={setSortOrder}
-          />
-        ),
         cell: (info: CellContext<Transaction, unknown>) => {
           const v = info.getValue() as number | undefined;
-          return v !== undefined && v !== null ? `$${v}` : '';
+          return v !== undefined && v !== null ? v.toFixed(4) : '';
         },
       },
     ],

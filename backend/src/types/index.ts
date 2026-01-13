@@ -1,15 +1,15 @@
-export type Period = 'day' | 'week' | 'two_weeks' | 'month';
+export type Period = "day" | "week" | "two_weeks" | "month";
 
 export type Metric =
-  | 'total_time_seconds'
-  | 'total_time_hours'
-  | 'total_invoice_amount'
-  | 'total_ram_hours'
-  | 'total_cpu_hours'
-  | 'total_transaction_count'
-  | 'unique_node_count'
-  | 'unique_node_ram'
-  | 'unique_node_cpu';
+  | "total_time_seconds"
+  | "total_time_hours"
+  | "total_invoice_amount"
+  | "total_ram_hours"
+  | "total_cpu_hours"
+  | "total_transaction_count"
+  | "unique_node_count"
+  | "unique_node_ram"
+  | "unique_node_cpu";
 
 export interface QueryParams {
   since: Date;
@@ -58,18 +58,14 @@ export interface GeoPoint {
   normalized: number;
 }
 
-
 export interface Transaction {
-  ts: string;
-  provider_wallet: string;
-  requester_wallet: string;
-  tx: string;
-  gpu: string;
-  ram: number;
-  vcpus: number;
-  duration: string;
-  invoiced_glm: number;
-  invoiced_dollar: number;
+  tx_hash: string;
+  block_number: number;
+  block_timestamp: string;
+  from_address: string;
+  to_address: string;
+  value_glm: number;
+  tx_type: string;
 }
 
 export interface TransactionsResponse {
@@ -81,10 +77,10 @@ export interface TransactionsResponse {
 
 // Plan metrics types (for Golem integration)
 // Predefined hours: 6, 24, 168 (7d), 720 (30d), 2160 (90d), or 'total'
-export type PlanPeriod = '6h' | '24h' | '7d' | '30d' | '90d' | 'total';
+export type PlanPeriod = "6h" | "24h" | "7d" | "30d" | "90d" | "total";
 
 // Granularity for time series data
-export type Granularity = 'hourly' | 'daily';
+export type Granularity = "hourly" | "daily";
 
 // Aggregated totals for a time range
 export interface PlanTotals {
