@@ -135,10 +135,10 @@ export async function getPlanStats(period: PlanPeriod): Promise<PlanStatsRespons
   const cutoffMs = toEpochMs(cutoff);
   const startMs = rangeStart ? toEpochMs(rangeStart) : null;
 
-  // Build WHERE clause for time range
+  // Build WHERE clause for time range - include running jobs
   const timeWhere = startMs
-    ? 'stop_at <= $1 AND stop_at >= $2'
-    : 'stop_at <= $1';
+    ? 'start_at < $1 AND (stop_at IS NULL OR stop_at >= $2)'
+    : 'start_at < $1';
   const timeParams = startMs ? [cutoffMs, startMs] : [cutoffMs];
 
   // 1. Get totals
@@ -147,12 +147,12 @@ export async function getPlanStats(period: PlanPeriod): Promise<PlanStatsRespons
   const totalsQuery = `
     SELECT
       COALESCE(SUM(invoice_amount), 0) as total_fees,
-      COALESCE(SUM((stop_at - start_at) / 1000.0 / 3600.0), 0) as compute_hours,
-      COALESCE(SUM(cpu * (stop_at - start_at) / 1000.0 / 3600.0), 0) as core_hours,
-      COALESCE(SUM(ram * (stop_at - start_at) / 1000.0 / 3600.0 / 1024.0), 0) as ram_hours,
+      COALESCE(SUM((COALESCE(stop_at, $1) - start_at) / 1000.0 / 3600.0), 0) as compute_hours,
+      COALESCE(SUM(cpu * (COALESCE(stop_at, $1) - start_at) / 1000.0 / 3600.0), 0) as core_hours,
+      COALESCE(SUM(ram * (COALESCE(stop_at, $1) - start_at) / 1000.0 / 3600.0 / 1024.0), 0) as ram_hours,
       COALESCE(SUM(
         CASE WHEN gpu_class_id IS NOT NULL AND gpu_class_id != ''
-        THEN (stop_at - start_at) / 1000.0 / 3600.0
+        THEN (COALESCE(stop_at, $1) - start_at) / 1000.0 / 3600.0
         ELSE 0 END
       ), 0) as gpu_hours
     FROM node_plan
@@ -164,7 +164,7 @@ export async function getPlanStats(period: PlanPeriod): Promise<PlanStatsRespons
     ? `
     SELECT COUNT(DISTINCT node_id) as active_nodes
     FROM node_plan
-    WHERE start_at < $1 AND stop_at >= $2
+    WHERE start_at < $1 AND (stop_at IS NULL OR stop_at >= $2)
   `
     : `
     SELECT COUNT(DISTINCT node_id) as active_nodes
@@ -205,16 +205,15 @@ export async function getPlanStats(period: PlanPeriod): Promise<PlanStatsRespons
         np.invoice_amount,
         np.start_at,
         np.stop_at,
-        -- Job duration in ms
-        GREATEST(1, np.stop_at - np.start_at) as job_duration_ms,
+        -- Job duration in ms (use cutoff for running jobs)
+        GREATEST(1, COALESCE(np.stop_at, $1) - np.start_at) as job_duration_ms,
         -- Overlap duration in ms: min(stop, bucket_end) - max(start, bucket_start)
-        GREATEST(0, LEAST(np.stop_at, b.bucket_end_ms) - GREATEST(np.start_at, b.bucket_start_ms)) as overlap_ms
+        GREATEST(0, LEAST(COALESCE(np.stop_at, $1), b.bucket_end_ms) - GREATEST(np.start_at, b.bucket_start_ms)) as overlap_ms
       FROM buckets b
       JOIN node_plan np ON
         np.start_at < b.bucket_end_ms
-        AND np.stop_at >= b.bucket_start_ms
-        AND np.stop_at <= $1
-        AND np.start_at >= $2 - 86400000::bigint * 30
+        AND (np.stop_at IS NULL OR np.stop_at >= b.bucket_start_ms)
+        AND np.start_at < $1
     )
     SELECT
       bucket,
@@ -240,8 +239,8 @@ export async function getPlanStats(period: PlanPeriod): Promise<PlanStatsRespons
         (EXTRACT(EPOCH FROM bucket) * 1000)::bigint as bucket_start_ms,
         (EXTRACT(EPOCH FROM bucket + interval '${intervalStr}') * 1000)::bigint as bucket_end_ms
       FROM (
-        SELECT DISTINCT date_trunc('${bucketInterval}', to_timestamp(stop_at / 1000.0)) as bucket
-        FROM node_plan WHERE stop_at <= $1
+        SELECT DISTINCT date_trunc('${bucketInterval}', to_timestamp(COALESCE(stop_at, $1) / 1000.0)) as bucket
+        FROM node_plan WHERE start_at < $1
       ) x
     ),
     job_overlaps AS (
@@ -256,13 +255,13 @@ export async function getPlanStats(period: PlanPeriod): Promise<PlanStatsRespons
         np.invoice_amount,
         np.start_at,
         np.stop_at,
-        GREATEST(1, np.stop_at - np.start_at) as job_duration_ms,
-        GREATEST(0, LEAST(np.stop_at, b.bucket_end_ms) - GREATEST(np.start_at, b.bucket_start_ms)) as overlap_ms
+        GREATEST(1, COALESCE(np.stop_at, $1) - np.start_at) as job_duration_ms,
+        GREATEST(0, LEAST(COALESCE(np.stop_at, $1), b.bucket_end_ms) - GREATEST(np.start_at, b.bucket_start_ms)) as overlap_ms
       FROM all_buckets b
       JOIN node_plan np ON
         np.start_at < b.bucket_end_ms
-        AND np.stop_at >= b.bucket_start_ms
-        AND np.stop_at <= $1
+        AND (np.stop_at IS NULL OR np.stop_at >= b.bucket_start_ms)
+        AND np.start_at < $1
     )
     SELECT
       bucket,
@@ -285,23 +284,23 @@ export async function getPlanStats(period: PlanPeriod): Promise<PlanStatsRespons
   const gpuHoursByModelQuery = `
     SELECT
       COALESCE(gc.gpu_class_name, 'Unknown') as group_name,
-      COALESCE(SUM((np.stop_at - np.start_at) / 1000.0 / 3600.0), 0) as value
+      COALESCE(SUM((COALESCE(np.stop_at, $1) - np.start_at) / 1000.0 / 3600.0), 0) as value
     FROM node_plan np
     LEFT JOIN gpu_classes gc ON np.gpu_class_id = gc.gpu_class_id
-    WHERE ${timeWhere.replace(/\$/g, (m) => `np.stop_at <= $1${startMs ? ' AND np.stop_at >= $2' : ''}`.includes(m) ? m : m)}
+    WHERE ${timeWhere}
       AND np.gpu_class_id IS NOT NULL AND np.gpu_class_id != ''
     GROUP BY gc.gpu_class_name
     ORDER BY value DESC
-  `.replace(timeWhere, timeWhere.split('stop_at').join('np.stop_at'));
+  `;
 
   // 4. Get GPU hours by VRAM
   const gpuHoursByVramQuery = `
     SELECT
       COALESCE(gc.vram_gb::text || ' GB', 'Unknown') as group_name,
-      COALESCE(SUM((np.stop_at - np.start_at) / 1000.0 / 3600.0), 0) as value
+      COALESCE(SUM((COALESCE(np.stop_at, $1) - np.start_at) / 1000.0 / 3600.0), 0) as value
     FROM node_plan np
     LEFT JOIN gpu_classes gc ON np.gpu_class_id = gc.gpu_class_id
-    WHERE np.stop_at <= $1 ${startMs ? 'AND np.stop_at >= $2' : ''}
+    WHERE ${timeWhere}
       AND np.gpu_class_id IS NOT NULL AND np.gpu_class_id != ''
     GROUP BY gc.vram_gb
     ORDER BY gc.vram_gb
@@ -315,7 +314,7 @@ export async function getPlanStats(period: PlanPeriod): Promise<PlanStatsRespons
       COUNT(DISTINCT np.node_id)::text as value
     FROM node_plan np
     LEFT JOIN gpu_classes gc ON np.gpu_class_id = gc.gpu_class_id
-    WHERE np.start_at < $1 AND np.stop_at >= $2
+    WHERE np.start_at < $1 AND (np.stop_at IS NULL OR np.stop_at >= $2)
     GROUP BY gc.gpu_class_name
     ORDER BY value DESC
   `
@@ -338,7 +337,7 @@ export async function getPlanStats(period: PlanPeriod): Promise<PlanStatsRespons
       COUNT(DISTINCT np.node_id)::text as value
     FROM node_plan np
     LEFT JOIN gpu_classes gc ON np.gpu_class_id = gc.gpu_class_id
-    WHERE np.start_at < $1 AND np.stop_at >= $2
+    WHERE np.start_at < $1 AND (np.stop_at IS NULL OR np.stop_at >= $2)
     GROUP BY gc.vram_gb
     ORDER BY gc.vram_gb NULLS FIRST
   `
@@ -370,13 +369,12 @@ export async function getPlanStats(period: PlanPeriod): Promise<PlanStatsRespons
     SELECT
       b.bucket,
       gc.gpu_class_name as group_name,
-      COALESCE(SUM(GREATEST(0, LEAST(np.stop_at, b.bucket_end_ms) - GREATEST(np.start_at, b.bucket_start_ms)) / ${msPerHour}.0), 0) as value
+      COALESCE(SUM(GREATEST(0, LEAST(COALESCE(np.stop_at, $1), b.bucket_end_ms) - GREATEST(np.start_at, b.bucket_start_ms)) / ${msPerHour}.0), 0) as value
     FROM buckets b
     JOIN node_plan np ON
       np.start_at < b.bucket_end_ms
-      AND np.stop_at >= b.bucket_start_ms
-      AND np.stop_at <= $1
-      AND np.start_at >= $2 - 86400000::bigint * 30
+      AND (np.stop_at IS NULL OR np.stop_at >= b.bucket_start_ms)
+      AND np.start_at < $1
       AND np.gpu_class_id IS NOT NULL AND np.gpu_class_id != ''
     JOIN gpu_classes gc ON np.gpu_class_id = gc.gpu_class_id
     GROUP BY b.bucket, gc.gpu_class_name
@@ -388,17 +386,17 @@ export async function getPlanStats(period: PlanPeriod): Promise<PlanStatsRespons
         bucket,
         (EXTRACT(EPOCH FROM bucket) * 1000)::bigint as bucket_start_ms,
         (EXTRACT(EPOCH FROM bucket + interval '${intervalStr}') * 1000)::bigint as bucket_end_ms
-      FROM (SELECT DISTINCT date_trunc('${bucketInterval}', to_timestamp(stop_at / 1000.0)) as bucket FROM node_plan WHERE stop_at <= $1) x
+      FROM (SELECT DISTINCT date_trunc('${bucketInterval}', to_timestamp(COALESCE(stop_at, $1) / 1000.0)) as bucket FROM node_plan WHERE start_at < $1) x
     )
     SELECT
       b.bucket,
       gc.gpu_class_name as group_name,
-      COALESCE(SUM(GREATEST(0, LEAST(np.stop_at, b.bucket_end_ms) - GREATEST(np.start_at, b.bucket_start_ms)) / ${msPerHour}.0), 0) as value
+      COALESCE(SUM(GREATEST(0, LEAST(COALESCE(np.stop_at, $1), b.bucket_end_ms) - GREATEST(np.start_at, b.bucket_start_ms)) / ${msPerHour}.0), 0) as value
     FROM all_buckets b
     JOIN node_plan np ON
       np.start_at < b.bucket_end_ms
-      AND np.stop_at >= b.bucket_start_ms
-      AND np.stop_at <= $1
+      AND (np.stop_at IS NULL OR np.stop_at >= b.bucket_start_ms)
+      AND np.start_at < $1
       AND np.gpu_class_id IS NOT NULL AND np.gpu_class_id != ''
     JOIN gpu_classes gc ON np.gpu_class_id = gc.gpu_class_id
     GROUP BY b.bucket, gc.gpu_class_name
@@ -422,13 +420,12 @@ export async function getPlanStats(period: PlanPeriod): Promise<PlanStatsRespons
     SELECT
       b.bucket,
       gc.vram_gb::text || ' GB' as group_name,
-      COALESCE(SUM(GREATEST(0, LEAST(np.stop_at, b.bucket_end_ms) - GREATEST(np.start_at, b.bucket_start_ms)) / ${msPerHour}.0), 0) as value
+      COALESCE(SUM(GREATEST(0, LEAST(COALESCE(np.stop_at, $1), b.bucket_end_ms) - GREATEST(np.start_at, b.bucket_start_ms)) / ${msPerHour}.0), 0) as value
     FROM buckets b
     JOIN node_plan np ON
       np.start_at < b.bucket_end_ms
-      AND np.stop_at >= b.bucket_start_ms
-      AND np.stop_at <= $1
-      AND np.start_at >= $2 - 86400000::bigint * 30
+      AND (np.stop_at IS NULL OR np.stop_at >= b.bucket_start_ms)
+      AND np.start_at < $1
       AND np.gpu_class_id IS NOT NULL AND np.gpu_class_id != ''
     JOIN gpu_classes gc ON np.gpu_class_id = gc.gpu_class_id
     WHERE gc.vram_gb IS NOT NULL
@@ -441,17 +438,17 @@ export async function getPlanStats(period: PlanPeriod): Promise<PlanStatsRespons
         bucket,
         (EXTRACT(EPOCH FROM bucket) * 1000)::bigint as bucket_start_ms,
         (EXTRACT(EPOCH FROM bucket + interval '${intervalStr}') * 1000)::bigint as bucket_end_ms
-      FROM (SELECT DISTINCT date_trunc('${bucketInterval}', to_timestamp(stop_at / 1000.0)) as bucket FROM node_plan WHERE stop_at <= $1) x
+      FROM (SELECT DISTINCT date_trunc('${bucketInterval}', to_timestamp(COALESCE(stop_at, $1) / 1000.0)) as bucket FROM node_plan WHERE start_at < $1) x
     )
     SELECT
       b.bucket,
       gc.vram_gb::text || ' GB' as group_name,
-      COALESCE(SUM(GREATEST(0, LEAST(np.stop_at, b.bucket_end_ms) - GREATEST(np.start_at, b.bucket_start_ms)) / ${msPerHour}.0), 0) as value
+      COALESCE(SUM(GREATEST(0, LEAST(COALESCE(np.stop_at, $1), b.bucket_end_ms) - GREATEST(np.start_at, b.bucket_start_ms)) / ${msPerHour}.0), 0) as value
     FROM all_buckets b
     JOIN node_plan np ON
       np.start_at < b.bucket_end_ms
-      AND np.stop_at >= b.bucket_start_ms
-      AND np.stop_at <= $1
+      AND (np.stop_at IS NULL OR np.stop_at >= b.bucket_start_ms)
+      AND np.start_at < $1
       AND np.gpu_class_id IS NOT NULL AND np.gpu_class_id != ''
     JOIN gpu_classes gc ON np.gpu_class_id = gc.gpu_class_id
     WHERE gc.vram_gb IS NOT NULL
@@ -479,9 +476,8 @@ export async function getPlanStats(period: PlanPeriod): Promise<PlanStatsRespons
     LEFT JOIN node_plan np ON
       np.gpu_class_id = gc.gpu_class_id
       AND np.start_at < (EXTRACT(EPOCH FROM (b.bucket + interval '${intervalStr}')) * 1000)
-      AND np.stop_at >= (EXTRACT(EPOCH FROM b.bucket) * 1000)
-      AND np.stop_at <= $1
-      AND np.start_at >= $2 - 86400000::bigint * 30
+      AND (np.stop_at IS NULL OR np.stop_at >= (EXTRACT(EPOCH FROM b.bucket) * 1000))
+      AND np.start_at < $1
     WHERE gc.gpu_class_id IS NOT NULL
     GROUP BY b.bucket, gc.gpu_class_name
     HAVING COUNT(DISTINCT np.node_id) > 0
@@ -489,8 +485,8 @@ export async function getPlanStats(period: PlanPeriod): Promise<PlanStatsRespons
   `
     : `
     WITH all_buckets AS (
-      SELECT DISTINCT date_trunc('${bucketInterval}', to_timestamp(stop_at / 1000.0)) as bucket
-      FROM node_plan WHERE stop_at <= $1
+      SELECT DISTINCT date_trunc('${bucketInterval}', to_timestamp(COALESCE(stop_at, $1) / 1000.0)) as bucket
+      FROM node_plan WHERE start_at < $1
     )
     SELECT
       b.bucket,
@@ -501,8 +497,8 @@ export async function getPlanStats(period: PlanPeriod): Promise<PlanStatsRespons
     LEFT JOIN node_plan np ON
       np.gpu_class_id = gc.gpu_class_id
       AND np.start_at < (EXTRACT(EPOCH FROM (b.bucket + interval '${intervalStr}')) * 1000)
-      AND np.stop_at >= (EXTRACT(EPOCH FROM b.bucket) * 1000)
-      AND np.stop_at <= $1
+      AND (np.stop_at IS NULL OR np.stop_at >= (EXTRACT(EPOCH FROM b.bucket) * 1000))
+      AND np.start_at < $1
     WHERE gc.gpu_class_id IS NOT NULL
     GROUP BY b.bucket, gc.gpu_class_name
     HAVING COUNT(DISTINCT np.node_id) > 0
@@ -533,17 +529,16 @@ export async function getPlanStats(period: PlanPeriod): Promise<PlanStatsRespons
     LEFT JOIN node_plan np ON
       np.gpu_class_id = gc.gpu_class_id
       AND np.start_at < (EXTRACT(EPOCH FROM (b.bucket + interval '${intervalStr}')) * 1000)
-      AND np.stop_at >= (EXTRACT(EPOCH FROM b.bucket) * 1000)
-      AND np.stop_at <= $1
-      AND np.start_at >= $2 - 86400000::bigint * 30
+      AND (np.stop_at IS NULL OR np.stop_at >= (EXTRACT(EPOCH FROM b.bucket) * 1000))
+      AND np.start_at < $1
     GROUP BY b.bucket, vg.vram_gb
     HAVING COUNT(DISTINCT np.node_id) > 0
     ORDER BY b.bucket, vg.vram_gb
   `
     : `
     WITH all_buckets AS (
-      SELECT DISTINCT date_trunc('${bucketInterval}', to_timestamp(stop_at / 1000.0)) as bucket
-      FROM node_plan WHERE stop_at <= $1
+      SELECT DISTINCT date_trunc('${bucketInterval}', to_timestamp(COALESCE(stop_at, $1) / 1000.0)) as bucket
+      FROM node_plan WHERE start_at < $1
     ),
     vram_groups AS (
       SELECT DISTINCT vram_gb FROM gpu_classes WHERE vram_gb IS NOT NULL
@@ -558,8 +553,8 @@ export async function getPlanStats(period: PlanPeriod): Promise<PlanStatsRespons
     LEFT JOIN node_plan np ON
       np.gpu_class_id = gc.gpu_class_id
       AND np.start_at < (EXTRACT(EPOCH FROM (b.bucket + interval '${intervalStr}')) * 1000)
-      AND np.stop_at >= (EXTRACT(EPOCH FROM b.bucket) * 1000)
-      AND np.stop_at <= $1
+      AND (np.stop_at IS NULL OR np.stop_at >= (EXTRACT(EPOCH FROM b.bucket) * 1000))
+      AND np.start_at < $1
     GROUP BY b.bucket, vg.vram_gb
     HAVING COUNT(DISTINCT np.node_id) > 0
     ORDER BY b.bucket, vg.vram_gb
