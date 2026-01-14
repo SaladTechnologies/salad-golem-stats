@@ -9,7 +9,22 @@ This directory contains integration tests that run against a real PostgreSQL dat
 
 ## Setup
 
-### 1. Create Test Database
+### Quick Setup (Recommended)
+
+Run the automated setup script:
+
+```bash
+npm run setup-tests
+```
+
+This will:
+- Start PostgreSQL and Redis with docker-compose
+- Wait for services to be ready
+- Create the test database automatically
+
+### Manual Setup (Alternative)
+
+If you prefer manual setup:
 
 ```bash
 createdb statsdb_test
@@ -18,11 +33,11 @@ createdb statsdb_test
 Or if using Docker/docker-compose (from project root):
 
 ```bash
-docker-compose up -d postgres
-docker exec -it $(docker ps -q -f name=postgres) psql -U devuser -c "CREATE DATABASE statsdb_test;"
+docker-compose up -d db redis
+docker exec -it salad-stats-db psql -U devuser -d statsdb -c "CREATE DATABASE statsdb_test;"
 ```
 
-### 2. Configure Environment (optional)
+### Configure Environment (optional)
 
 Copy `.env.test.example` to `.env.test` and customize if needed:
 
