@@ -74,6 +74,18 @@ Watch mode (all tests):
 npm run test:watch
 ```
 
+## Cleanup
+
+Stop test services (preserves data):
+```bash
+npm run teardown-tests
+```
+
+Stop test services and remove all data/volumes:
+```bash
+npm run teardown-tests -- --clean
+```
+
 ## Configuration
 
 Integration tests use environment variables with `TEST_` prefix. Defaults:
