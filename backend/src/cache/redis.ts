@@ -47,6 +47,11 @@ function generateCacheKey(cacheKeyPrefix: string, query: unknown): string {
   return `${cacheKeyPrefix}:${hash}`;
 }
 
+// Export for use in cache warmer
+export function generateCacheKeyForWarmer(cacheKeyPrefix: string, query: unknown = {}): string {
+  return generateCacheKey(cacheKeyPrefix, query);
+}
+
 export function createCacheHooks(cacheKeyPrefix: CacheKey) {
   const ttl = config.cacheTtl[cacheKeyPrefix];
 

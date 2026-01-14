@@ -25,10 +25,8 @@ describe('planMetrics service', () => {
 
   describe('getPlanStats', () => {
     const mockTotalsRow = {
-      active_nodes: '100',
       total_fees: '5000.50',
       compute_hours: '1000.25',
-      transactions: '500',
       core_hours: '2000.75',
       ram_hours: '3000.50',
       gpu_hours: '800.25',
@@ -40,7 +38,6 @@ describe('planMetrics service', () => {
         active_nodes: '50',
         total_fees: '2500.25',
         compute_hours: '500.125',
-        transactions: '250',
         core_hours: '1000.375',
         ram_hours: '1500.25',
         gpu_hours: '400.125',
@@ -50,7 +47,6 @@ describe('planMetrics service', () => {
         active_nodes: '50',
         total_fees: '2500.25',
         compute_hours: '500.125',
-        transactions: '250',
         core_hours: '1000.375',
         ram_hours: '1500.25',
         gpu_hours: '400.125',
@@ -77,14 +73,19 @@ describe('planMetrics service', () => {
     ];
 
     beforeEach(() => {
-      // Set up mock responses for each query in order
+      // Set up mock responses for each query in order (11 total queries)
       mockQuery
         .mockResolvedValueOnce([mockTotalsRow]) // totals query
+        .mockResolvedValueOnce([{ active_nodes: '100' }]) // active nodes query (separate)
         .mockResolvedValueOnce(mockTimeSeriesRows) // time series query
         .mockResolvedValueOnce(mockGpuByModelRows) // gpu hours by model
         .mockResolvedValueOnce(mockGpuByVramRows) // gpu hours by vram
         .mockResolvedValueOnce(mockNodesByModelRows) // active nodes by model
-        .mockResolvedValueOnce(mockNodesByVramRows); // active nodes by vram
+        .mockResolvedValueOnce(mockNodesByVramRows) // active nodes by vram
+        .mockResolvedValueOnce([]) // gpu hours by model time series
+        .mockResolvedValueOnce([]) // gpu hours by vram time series
+        .mockResolvedValueOnce([]) // active nodes by model time series
+        .mockResolvedValueOnce([]); // active nodes by vram time series
     });
 
     it('should return correct structure for 7d period', async () => {
@@ -108,11 +109,16 @@ describe('planMetrics service', () => {
       for (const period of periods) {
         mockQuery
           .mockResolvedValueOnce([mockTotalsRow])
+          .mockResolvedValueOnce([{ active_nodes: '100' }])
           .mockResolvedValueOnce(mockTimeSeriesRows)
           .mockResolvedValueOnce(mockGpuByModelRows)
           .mockResolvedValueOnce(mockGpuByVramRows)
           .mockResolvedValueOnce(mockNodesByModelRows)
-          .mockResolvedValueOnce(mockNodesByVramRows);
+          .mockResolvedValueOnce(mockNodesByVramRows)
+          .mockResolvedValueOnce([])
+          .mockResolvedValueOnce([])
+          .mockResolvedValueOnce([])
+          .mockResolvedValueOnce([]);
 
         const result = await getPlanStats(period);
         expect(result.granularity).toBe('hourly');
@@ -125,11 +131,16 @@ describe('planMetrics service', () => {
       for (const period of periods) {
         mockQuery
           .mockResolvedValueOnce([mockTotalsRow])
+          .mockResolvedValueOnce([{ active_nodes: '100' }])
           .mockResolvedValueOnce(mockTimeSeriesRows)
           .mockResolvedValueOnce(mockGpuByModelRows)
           .mockResolvedValueOnce(mockGpuByVramRows)
           .mockResolvedValueOnce(mockNodesByModelRows)
-          .mockResolvedValueOnce(mockNodesByVramRows);
+          .mockResolvedValueOnce(mockNodesByVramRows)
+          .mockResolvedValueOnce([])
+          .mockResolvedValueOnce([])
+          .mockResolvedValueOnce([])
+          .mockResolvedValueOnce([]);
 
         const result = await getPlanStats(period);
         expect(result.granularity).toBe('daily');
@@ -160,11 +171,16 @@ describe('planMetrics service', () => {
     it('should return "beginning" as start for total period', async () => {
       mockQuery
         .mockResolvedValueOnce([mockTotalsRow])
+        .mockResolvedValueOnce([{ active_nodes: '100' }])
         .mockResolvedValueOnce(mockTimeSeriesRows)
         .mockResolvedValueOnce(mockGpuByModelRows)
         .mockResolvedValueOnce(mockGpuByVramRows)
         .mockResolvedValueOnce(mockNodesByModelRows)
-        .mockResolvedValueOnce(mockNodesByVramRows);
+        .mockResolvedValueOnce(mockNodesByVramRows)
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]);
 
       const result = await getPlanStats('total');
 
@@ -178,7 +194,6 @@ describe('planMetrics service', () => {
         active_nodes: 100,
         total_fees: 5000.5,
         compute_hours: 1000.25,
-        transactions: 500,
         core_hours: 2000.75,
         ram_hours: 3000.5,
         gpu_hours: 800.25,
@@ -202,12 +217,12 @@ describe('planMetrics service', () => {
       const result = await getPlanStats('7d');
 
       expect(result.time_series).toHaveLength(2);
+      // Bucket is 2025-12-23T00:00:00Z, but timestamp is offset by 48 hours
       expect(result.time_series[0]).toEqual({
-        timestamp: '2025-12-23T00:00:00.000Z',
+        timestamp: '2025-12-25T00:00:00.000Z',
         active_nodes: 50,
         total_fees: 2500.25,
         compute_hours: 500.125,
-        transactions: 250,
         core_hours: 1000.375,
         ram_hours: 1500.25,
         gpu_hours: 400.125,
@@ -220,14 +235,17 @@ describe('planMetrics service', () => {
 
       mockQuery
         .mockResolvedValueOnce([{
-          active_nodes: '0',
           total_fees: null,
           compute_hours: null,
-          transactions: '0',
           core_hours: null,
           ram_hours: null,
           gpu_hours: null,
         }])
+        .mockResolvedValueOnce([{ active_nodes: '0' }])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([])
@@ -240,7 +258,6 @@ describe('planMetrics service', () => {
         active_nodes: 0,
         total_fees: 0,
         compute_hours: 0,
-        transactions: 0,
         core_hours: 0,
         ram_hours: 0,
         gpu_hours: 0,
@@ -251,10 +268,8 @@ describe('planMetrics service', () => {
 
   describe('period to hours mapping', () => {
     const emptyTotalsRow = {
-      active_nodes: '0',
       total_fees: '0',
       compute_hours: '0',
-      transactions: '0',
       core_hours: '0',
       ram_hours: '0',
       gpu_hours: '0',
@@ -265,11 +280,16 @@ describe('planMetrics service', () => {
 
       mockQuery
         .mockResolvedValueOnce([emptyTotalsRow]) // totals
+        .mockResolvedValueOnce([{ active_nodes: '0' }]) // active nodes
         .mockResolvedValueOnce([]) // time series
         .mockResolvedValueOnce([]) // gpu by model
         .mockResolvedValueOnce([]) // gpu by vram
         .mockResolvedValueOnce([]) // nodes by model
-        .mockResolvedValueOnce([]); // nodes by vram
+        .mockResolvedValueOnce([]) // nodes by vram
+        .mockResolvedValueOnce([]) // gpu by model ts
+        .mockResolvedValueOnce([]) // gpu by vram ts
+        .mockResolvedValueOnce([]) // nodes by model ts
+        .mockResolvedValueOnce([]); // nodes by vram ts
 
       // Test 6h period
       await getPlanStats('6h');
@@ -295,11 +315,16 @@ describe('planMetrics service', () => {
 
       mockQuery
         .mockResolvedValueOnce([emptyTotalsRow]) // totals
+        .mockResolvedValueOnce([{ active_nodes: '0' }]) // active nodes
         .mockResolvedValueOnce([]) // time series
         .mockResolvedValueOnce([]) // gpu by model
         .mockResolvedValueOnce([]) // gpu by vram
         .mockResolvedValueOnce([]) // nodes by model
-        .mockResolvedValueOnce([]); // nodes by vram
+        .mockResolvedValueOnce([]) // nodes by vram
+        .mockResolvedValueOnce([]) // gpu by model ts
+        .mockResolvedValueOnce([]) // gpu by vram ts
+        .mockResolvedValueOnce([]) // nodes by model ts
+        .mockResolvedValueOnce([]); // nodes by vram ts
 
       await getPlanStats('total');
 
