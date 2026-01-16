@@ -50,3 +50,4 @@ backend/venv
 data-collection/data/city_geocode_cache.json
 data-collection/__pycache__/shared_geo_db.cpython-313.pyc
 data-collection/data/city_data_export.json
+data-collection/data/*.csv
