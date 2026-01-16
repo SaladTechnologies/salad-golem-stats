@@ -6,7 +6,11 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
+    "setup-tests": "bash scripts/setup-tests.sh",
+    "teardown-tests": "bash scripts/teardown-tests.sh",
     "test": "vitest run",
+    "test:unit": "vitest run src",
+    "test:integration": "vitest run test",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage"
   },

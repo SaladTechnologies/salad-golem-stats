@@ -35,7 +35,6 @@ describe('planStats routes', () => {
       active_nodes: 100,
       total_fees: 5000.5,
       compute_hours: 1000.25,
-      transactions: 500,
       core_hours: 2000.75,
       ram_hours: 3000.5,
       gpu_hours: 800.25,
@@ -58,7 +57,6 @@ describe('planStats routes', () => {
         active_nodes: 50,
         total_fees: 2500.25,
         compute_hours: 500.125,
-        transactions: 250,
         core_hours: 1000.375,
         ram_hours: 1500.25,
         gpu_hours: 400.125,
@@ -177,7 +175,6 @@ describe('planStats routes', () => {
       expect(body.totals).toHaveProperty('active_nodes');
       expect(body.totals).toHaveProperty('total_fees');
       expect(body.totals).toHaveProperty('compute_hours');
-      expect(body.totals).toHaveProperty('transactions');
       expect(body.totals).toHaveProperty('core_hours');
       expect(body.totals).toHaveProperty('ram_hours');
       expect(body.totals).toHaveProperty('gpu_hours');

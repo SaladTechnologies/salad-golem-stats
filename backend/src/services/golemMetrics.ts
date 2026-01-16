@@ -2,6 +2,10 @@ import { getPlanStats } from './planMetrics.js';
 import { query } from '../db/connection.js';
 import { config } from '../config.js';
 
+// Data offset in hours - matches planMetrics offset
+// Can't return data that hasn't gone through Golem yet
+const DATA_OFFSET_HOURS = 48;
+
 interface NetworkStatsResponse {
   timestamp: string;
   network_id: string;
@@ -74,46 +78,40 @@ export async function getGolemNetworkStats(): Promise<NetworkStatsResponse> {
     gpu_hours: 0,
   };
 
-  // Calculate total resources from current active nodes
-  // Query the database for current resource totals
+  // Calculate total resources from nodes active in the 6h window
+  // Uses same time window as stats6h with DATA_OFFSET applied
+  const cutoffMs = Date.now() - (DATA_OFFSET_HOURS * 3600000);
+  const startMs = cutoffMs - (6 * 3600000);
+
   const resourcesResult = await query<{
     total_cores: string;
     total_ram_gib: string;
-    total_disk_gib: string;
     total_gpus: string;
   }>(
     `
     SELECT
       COALESCE(SUM(cpu), 0) as total_cores,
       COALESCE(SUM(ram / 1024.0), 0) as total_ram_gib,
-      0 as total_disk_gib,
       COALESCE(COUNT(DISTINCT CASE WHEN gpu_class_id IS NOT NULL AND gpu_class_id != '' THEN node_id END), 0) as total_gpus
-    FROM node_plan
-    WHERE stop_at IS NULL OR stop_at > EXTRACT(EPOCH FROM NOW()) * 1000
+    FROM (
+      SELECT DISTINCT ON (node_id) node_id, cpu, ram, gpu_class_id
+      FROM node_plan
+      WHERE start_at < $1 AND (stop_at IS NULL OR stop_at >= $2)
+      ORDER BY node_id, start_at DESC
+    ) latest_nodes
   `,
-    []
+    [cutoffMs, startMs]
   );
 
   const resources = resourcesResult[0] || {
     total_cores: '0',
     total_ram_gib: '0',
-    total_disk_gib: '0',
     total_gpus: '0',
   };
 
-  // For "computing" providers, we'll estimate based on recent activity
-  // Use nodes that have had activity in the last hour
-  const computingResult = await query<{ computing_nodes: string }>(
-    `
-    SELECT COUNT(DISTINCT node_id) as computing_nodes
-    FROM node_plan
-    WHERE start_at > (EXTRACT(EPOCH FROM NOW()) * 1000 - 3600000)
-      OR (stop_at IS NULL OR stop_at > (EXTRACT(EPOCH FROM NOW()) * 1000 - 3600000))
-  `,
-    []
-  );
-
-  const computingNodes = parseInt(computingResult[0]?.computing_nodes || '0', 10);
+  // For "computing" providers, use the same as online
+  // In our system, online nodes are computing nodes
+  const computingNodes = currentData.active_nodes;
 
   // Version data - for now, we'll use a placeholder since we don't have version info
   // This would need to be extended based on actual version tracking in the database
@@ -135,7 +133,7 @@ export async function getGolemNetworkStats(): Promise<NetworkStatsResponse> {
     resources: {
       cores: parseInt(resources.total_cores, 10),
       memory_gib: parseFloat(resources.total_ram_gib),
-      disk_gib: parseFloat(resources.total_disk_gib),
+      disk_gib: 0, // Disk is not tracked in our database
       gpus: parseInt(resources.total_gpus, 10),
     },
     earnings: {
@@ -156,27 +154,29 @@ export async function getGolemHistoricalStats(): Promise<HistoricalStatsResponse
 
   // Query for historical resource data by runtime (VM vs VM-NVIDIA)
   // Get hourly data for last 24 hours, daily for older
+  // Apply DATA_OFFSET to align with other metrics
+  const historicalCutoff = Date.now() - (DATA_OFFSET_HOURS * 3600000);
+  const historicalStart = historicalCutoff - (30 * 24 * 3600000); // 30 days
+
   const networkStatsResult = await query<{
     bucket: Date;
     has_gpu: boolean;
     online: string;
     cores: string;
     ram_gib: string;
-    disk_gib: string;
     gpus: string;
   }>(
     `
     WITH time_buckets AS (
       SELECT
         CASE
-          WHEN bucket >= NOW() - INTERVAL '24 hours' THEN date_trunc('hour', bucket)
+          WHEN bucket >= to_timestamp($1 / 1000.0) - INTERVAL '24 hours' THEN date_trunc('hour', bucket)
           ELSE date_trunc('day', bucket)
         END as bucket,
         CASE WHEN gpu_class_id IS NOT NULL AND gpu_class_id != '' THEN true ELSE false END as has_gpu,
         COUNT(DISTINCT node_id) as online,
         SUM(cpu) as cores,
         SUM(ram / 1024.0) as ram_gib,
-         as disk_gib,
         COUNT(DISTINCT CASE WHEN gpu_class_id IS NOT NULL AND gpu_class_id != '' THEN node_id END) as gpus
       FROM (
         SELECT DISTINCT ON (date_trunc('hour', to_timestamp(start_at / 1000.0)), node_id)
@@ -184,10 +184,9 @@ export async function getGolemHistoricalStats(): Promise<HistoricalStatsResponse
           node_id,
           cpu,
           ram,
-          disk,
           gpu_class_id
         FROM node_plan
-        WHERE start_at >= EXTRACT(EPOCH FROM (NOW() - INTERVAL '30 days')) * 1000
+        WHERE start_at >= $2
         ORDER BY date_trunc('hour', to_timestamp(start_at / 1000.0)), node_id, start_at DESC
       ) x
       GROUP BY 1, 2
@@ -198,13 +197,12 @@ export async function getGolemHistoricalStats(): Promise<HistoricalStatsResponse
       online::text,
       cores::text,
       ram_gib::text,
-      disk_gib::text,
       gpus::text
     FROM time_buckets
-    WHERE bucket >= NOW() - INTERVAL '30 days'
+    WHERE bucket >= to_timestamp($2 / 1000.0)
     ORDER BY bucket, has_gpu
   `,
-    []
+    [historicalCutoff, historicalStart]
   );
 
   // Separate VM and VM-NVIDIA data
@@ -217,7 +215,7 @@ export async function getGolemHistoricalStats(): Promise<HistoricalStatsResponse
       online: parseInt(row.online, 10),
       cores: parseInt(row.cores, 10),
       memory_gib: parseFloat(row.ram_gib),
-      disk_gib: parseFloat(row.disk_gib),
+      disk_gib: 0, // Disk is not tracked in our database
       gpus: parseInt(row.gpus, 10),
     };
 
@@ -229,8 +227,14 @@ export async function getGolemHistoricalStats(): Promise<HistoricalStatsResponse
   }
 
   // Get utilization data at configured granularity (default: 30-second intervals for last 6 hours)
+  // Apply DATA_OFFSET to align with other metrics
   const granularitySeconds = config.golemUtilizationGranularitySeconds;
   const utilizationHours = 6;
+  const utilizationCutoff = Date.now() - (DATA_OFFSET_HOURS * 3600000);
+  const utilizationStart = utilizationCutoff - (utilizationHours * 3600000);
+  // Subtract one interval to make end exclusive (generate_series includes both endpoints)
+  const utilizationEnd = utilizationCutoff - (granularitySeconds * 1000);
+
   const utilizationResult = await query<{
     bucket: Date;
     computing_nodes: string;
@@ -238,8 +242,8 @@ export async function getGolemHistoricalStats(): Promise<HistoricalStatsResponse
     `
     WITH time_buckets AS (
       SELECT generate_series(
-        NOW() - INTERVAL '${utilizationHours} hours',
-        NOW(),
+        to_timestamp($1 / 1000.0),
+        to_timestamp($2 / 1000.0),
         INTERVAL '${granularitySeconds} seconds'
       ) as bucket
     )
@@ -253,7 +257,7 @@ export async function getGolemHistoricalStats(): Promise<HistoricalStatsResponse
     GROUP BY b.bucket
     ORDER BY b.bucket
   `,
-    []
+    [utilizationStart, utilizationEnd]
   );
 
   const utilization: Array<[number, number]> = utilizationResult.map((row) => [
