@@ -642,7 +642,7 @@ export default function Dashboard() {
                     },
                     {
                       value: totals.observed_fees ?? 0,
-                      unit: '$',
+                      unit: 'GLM',
                       label: `Fees observed (${periodLabel})`,
                     },
                     {
@@ -800,12 +800,12 @@ export default function Dashboard() {
                   <Grid size={{ xs: 12, sm: 6 }}>
                     <TrendChart
                       id="trend-observed-fees"
-                      title="Fees Observed ($)"
+                      title="Fees Observed (GLM)"
                       description="Actual GLM payments made to providers."
                       trendWindow={globalTimeWindow}
                       trendData={transformTimeSeries(plansData.time_series, 'observed_fees')}
-                      unit="$"
-                      unitType="front"
+                      unit="GLM"
+                      unitType="back"
                       isLoading={isLoading}
                     />
                   </Grid>
