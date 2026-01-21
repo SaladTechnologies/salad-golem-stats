@@ -151,17 +151,32 @@ export async function getPlanStats(period: PlanPeriod): Promise<PlanStatsRespons
   const transactionRangeStart = getRangeStart(new Date(), period);
   const granularity = getGranularity(period);
 
+  console.log('DEBUG - period:', period);
+  console.log('DEBUG - PERIOD_HOURS[period]:', PERIOD_HOURS[period]);
+  console.log('DEBUG - planRangeStart:', planRangeStart);
+  console.log('DEBUG - transactionRangeStart:', transactionRangeStart);
+
   // PLAN METRICS TIMING: Use data cutoff (48-hour offset) because node plan data needs processing time
   const planCutoffMs = toEpochMs(cutoff);
   const planStartMs = planRangeStart ? toEpochMs(planRangeStart) : null;
   const planTimeParams = planStartMs ? [planCutoffMs, planStartMs] : [planCutoffMs];
-  
+
   // TRANSACTION METRICS TIMING: Use current time (no offset) since GLM transactions are already confirmed on-chain
   const currentTime = Date.now();
   const transactionEndMs = toEpochMs(new Date(currentTime));
 
   const transactionStartMs = transactionRangeStart ? toEpochMs(transactionRangeStart) : null;
   const transactionTimeParams = transactionStartMs ? [transactionEndMs, transactionStartMs] : [transactionEndMs];
+
+  // Debug logging
+  console.log('period:', period);
+  console.log('planCutoffMs:', planCutoffMs, planCutoffMs ? new Date(planCutoffMs).toISOString() : null);
+  console.log('planStartMs:', planStartMs, planStartMs ? new Date(planStartMs).toISOString() : null);
+  console.log('planTimeParams:', planTimeParams, planTimeParams.map(ts => ts ? new Date(ts).toISOString() : null));
+  console.log('currentTime:', currentTime, new Date(currentTime).toISOString());
+  console.log('transactionEndMs:', transactionEndMs, new Date(transactionEndMs).toISOString());
+  console.log('transactionStartMs:', transactionStartMs, transactionStartMs ? new Date(transactionStartMs).toISOString() : null);
+  console.log('transactionTimeParams:', transactionTimeParams, transactionTimeParams.map(ts => ts ? new Date(ts).toISOString() : null));
 
   // Build WHERE clause for plan time range - use overlap logic for all plan metrics
   const planTimeWhereForOverlap = planStartMs
@@ -791,16 +806,20 @@ export async function getPlanStats(period: PlanPeriod): Promise<PlanStatsRespons
   for (const row of transactionCountTimeSeriesResult) {
     // Don't apply offset to transaction data - it's already confirmed on-chain
     const bucketTimestamp = new Date(row.bucket.getTime()).toISOString();
-    transactionCountMap.set(bucketTimestamp, parseInt(row.transaction_count || '0', 10));
+    const count = parseInt(row.transaction_count || '0', 10);
+    // console.log('TransactionBucket:', bucketTimestamp, 'count:', count);
+    transactionCountMap.set(bucketTimestamp, count);
   }
 
   const timeSeries: PlanDataPoint[] = timeSeriesResult.map((row) => {
     const planTimestamp = new Date(row.bucket.getTime() + (DATA_OFFSET_HOURS * 60 * 60 * 1000)).toISOString();
-    const transactionTimestamp = new Date(row.bucket.getTime()).toISOString(); // No offset for transaction lookup
+    // For a plan bucket on Day N-2, we need to look up transaction data for Day N.
+    // So, we add the offset to the plan bucket's timestamp to get the correct transaction timestamp.
+    const transactionTimestamp = new Date(row.bucket.getTime() + (DATA_OFFSET_HOURS * 60 * 60 * 1000)).toISOString();
     const expectedFees = parseFloat(row.total_fees || '0');
     const observedFees = observedFeesMap.get(transactionTimestamp) || 0;
     const transactionCount = transactionCountMap.get(transactionTimestamp) || 0;
-    
+    console.log('PlanBucket:', new Date(row.bucket.getTime()).toISOString(), 'TransactionLookup:', transactionTimestamp, 'Found:', transactionCount);
     return {
       timestamp: planTimestamp, // Use plan timestamp for display (with offset)
       active_nodes: parseInt(row.active_nodes, 10) || 0,
@@ -847,7 +866,7 @@ export async function getPlanStats(period: PlanPeriod): Promise<PlanStatsRespons
     granularity,
     data_cutoff: cutoff.toISOString(),
     range: {
-      start: rangeStart ? rangeStart.toISOString(): 'beginning',
+      start: planRangeStart ? planRangeStart.toISOString(): 'beginning',
       end: cutoff.toISOString(),
     },
     totals,
