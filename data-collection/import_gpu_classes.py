@@ -1,22 +1,22 @@
 #!/usr/bin/env python3
 """
-Import GPU classes data from JSON file to PostgreSQL.
+Import GPU classes data from CSV file to PostgreSQL.
 
 Usage:
     python import_gpu_classes.py input_file [--clear] [--dry-run]
 
-    input_file: Path to JSON file exported by export_gpu_classes.py
+    input_file: Path to CSV file with GPU classes data
     --clear: Truncate gpu_classes table before import
     --dry-run: Show what would be imported without actually doing it
 
-Imports GPU classes data from backup or transfer files.
+Imports GPU classes data from CSV files.
 
 Requires environment variables (via .env or environment):
     POSTGRES_HOST, POSTGRES_PORT, POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD
 """
 
 import argparse
-import json
+import csv
 import os
 import sys
 from datetime import datetime
@@ -38,96 +38,81 @@ def get_db_conn():
     )
 
 
-def load_export_file(file_path):
-    """Load and validate export file."""
+def parse_gpu_row(row):
+    """Parse CSV row into GPU classes data."""
+    try:
+        # CSV columns: gpu_class_id,batch_price,low_price,medium_price,high_price,gpu_type,gpu_class_name,vram_gb
+        return {
+            "gpu_class_id": row[0].strip(),
+            "batch_price": float(row[1]) if row[1] and row[1].strip() else None,
+            "low_price": float(row[2]) if row[2] and row[2].strip() else None,
+            "medium_price": float(row[3]) if row[3] and row[3].strip() else None,
+            "high_price": float(row[4]) if row[4] and row[4].strip() else None,
+            "gpu_type": row[5].strip() if row[5] and row[5].strip() else None,
+            "gpu_class_name": row[6].strip() if row[6] else None,
+            "vram_gb": int(row[7]) if row[7] and row[7].strip() else None,
+        }
+    except (IndexError, ValueError) as e:
+        raise ValueError(f"Invalid row format: {e}")
+
+
+def load_csv_file(file_path):
+    """Load and validate CSV file."""
+    gpu_classes = []
+    errors = []
+
     try:
         with open(file_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
+            reader = csv.reader(f)
 
-        # Validate structure
-        if "export_metadata" not in data or "data" not in data:
-            raise ValueError("Invalid export file format")
+            for row_num, row in enumerate(reader, 1):
+                # Skip empty rows
+                if not row or len(row) < 8:
+                    if any(
+                        cell.strip() for cell in row
+                    ):  # Only report if row has content
+                        errors.append(
+                            f"Row {row_num}: Incomplete row (expected 8 columns, got {len(row)})"
+                        )
+                    continue
 
-        metadata = data["export_metadata"]
+                try:
+                    gpu = parse_gpu_row(row)
 
-        print(f"📁 Export file: {os.path.abspath(file_path)}")
-        print(f"📅 Export date: {metadata.get('timestamp', 'Unknown')}")
-        print(f"🗄️  Source: {metadata.get('source_database', 'Unknown')}")
-        print(f"� Records: {metadata.get('record_count', len(data['data']))}")
+                    # Basic validation
+                    if not gpu["gpu_class_id"]:
+                        errors.append(f"Row {row_num}: Missing required gpu_class_id")
+                        continue
 
-        return data
+                    gpu_classes.append(gpu)
+
+                except ValueError as e:
+                    errors.append(f"Row {row_num}: {e}")
+                except Exception as e:
+                    errors.append(f"Row {row_num}: Unexpected error - {e}")
+
+        print(f"📁 CSV file: {os.path.abspath(file_path)}")
+        print(f"📊 Parsed {len(gpu_classes)} valid GPU classes")
+
+        if errors:
+            print(f"⚠️  {len(errors)} rows had errors")
+
+        return gpu_classes, errors
 
     except FileNotFoundError:
         print(f"❌ File not found: {file_path}")
-        return None
-    except json.JSONDecodeError as e:
-        print(f"❌ Invalid JSON file: {e}")
-        return None
+        return None, None
     except Exception as e:
         print(f"❌ Error loading file: {e}")
-        return None
-
-
-def create_table_if_not_exists(cursor, schema_info):
-    """Create gpu_classes table if it doesn't exist based on schema info."""
-    if not schema_info:
-        print("⚠️  No schema information available, skipping table creation")
-        return
-
-    # Check if table exists
-    cursor.execute(
-        """
-        SELECT EXISTS (
-            SELECT FROM information_schema.tables 
-            WHERE table_name = 'gpu_classes'
-        );
-    """
-    )
-
-    if cursor.fetchone()[0]:
-        print("✅ Table gpu_classes already exists")
-        return
-
-    print("🔨 Creating gpu_classes table...")
-
-    # Build CREATE TABLE statement from schema
-    columns = schema_info.get("columns", [])
-    if not columns:
-        print("❌ No column information available")
-        return
-
-    column_defs = []
-    for col in columns:
-        col_def = f"{col['name']} {col['type']}"
-        if not col.get("nullable", True):
-            col_def += " NOT NULL"
-        if col.get("default"):
-            col_def += f" DEFAULT {col['default']}"
-        column_defs.append(col_def)
-
-    # Add primary key if gpu_class_id exists
-    if any(col["name"] == "gpu_class_id" for col in columns):
-        column_defs.append("PRIMARY KEY (gpu_class_id)")
-
-    create_sql = f"""
-        CREATE TABLE gpu_classes (
-            {', '.join(column_defs)}
-        );
-    """
-
-    cursor.execute(create_sql)
-    print("✅ Table gpu_classes created")
+        return None, None
 
 
 def import_gpu_classes(file_path, clear_table=False, dry_run=False):
-    """Import GPU classes data from JSON file."""
-    # Load export file
-    data = load_export_file(file_path)
-    if not data:
+    """Import GPU classes data from CSV file."""
+    # Load CSV file
+    gpu_classes, errors = load_csv_file(file_path)
+    if gpu_classes is None:
         return False
-
-    gpu_classes = data["data"]
-    schema_info = data["export_metadata"].get("schema", {})
 
     if not gpu_classes:
         print("⚠️  No GPU classes data to import")
@@ -135,12 +120,22 @@ def import_gpu_classes(file_path, clear_table=False, dry_run=False):
 
     if dry_run:
         print(f"\n🔍 DRY RUN - Would import {len(gpu_classes)} GPU classes:")
-        for i, gpu in enumerate(gpu_classes[:3]):  # Show first 3
+        for i, gpu in enumerate(gpu_classes[:5]):  # Show first 5
+            vram = f"{gpu['vram_gb']}GB" if gpu['vram_gb'] else "N/A"
+            price = f"${gpu['medium_price']:.3f}" if gpu['medium_price'] else "N/A"
             print(
-                f"   {i+1}. {gpu.get('gpu_class_name', 'Unknown')} - {gpu.get('vram_gb', 'N/A')}GB"
+                f"   {i+1}. {gpu['gpu_class_name']} - {vram} - {price}"
             )
-        if len(gpu_classes) > 3:
-            print(f"   ... and {len(gpu_classes) - 3} more")
+        if len(gpu_classes) > 5:
+            print(f"   ... and {len(gpu_classes) - 5} more")
+            
+        if errors:
+            print(f"\n⚠️  Would skip {len(errors)} rows with errors:")
+            for error in errors[:3]:
+                print(f"   {error}")
+            if len(errors) > 3:
+                print(f"   ... and {len(errors) - 3} more errors")
+                
         return True
 
     try:
@@ -152,51 +147,49 @@ def import_gpu_classes(file_path, clear_table=False, dry_run=False):
             f"Database: {os.getenv('POSTGRES_HOST', 'localhost')}:{os.getenv('POSTGRES_PORT', 5432)}/{os.getenv('POSTGRES_DB', 'statsdb')}"
         )
 
-        # Create table if needed
-        create_table_if_not_exists(cursor, schema_info)
-
         # Clear table if requested
         if clear_table:
             print("🗑️  Clearing existing gpu_classes data...")
             cursor.execute("TRUNCATE gpu_classes RESTART IDENTITY CASCADE;")
             print("✅ Table cleared")
 
-        # Prepare insert data
+        # Import GPU classes in batches
         if gpu_classes:
-            # Get column names from first record
-            column_names = list(gpu_classes[0].keys())
-
             print(f"\n📥 Importing {len(gpu_classes)} GPU classes...")
-            print(f"   Columns: {column_names}")
 
-            # Convert to tuples for batch insert
+            # Prepare data for batch insert
             values = []
             for gpu in gpu_classes:
-                values.append(tuple(gpu.get(col) for col in column_names))
-
-            # Build insert query with ON CONFLICT
-            placeholders = ", ".join(["%s"] * len(column_names))
-            columns_str = ", ".join(column_names)
-
-            # Use upsert if gpu_class_id column exists
-            if "gpu_class_id" in column_names:
-                update_clause = ", ".join(
-                    [
-                        f"{col} = EXCLUDED.{col}"
-                        for col in column_names
-                        if col != "gpu_class_id"
-                    ]
+                values.append(
+                    (
+                        gpu["gpu_class_id"],
+                        gpu["batch_price"],
+                        gpu["low_price"],
+                        gpu["medium_price"],
+                        gpu["high_price"],
+                        gpu["gpu_type"],
+                        gpu["gpu_class_name"],
+                        gpu["vram_gb"],
+                    )
                 )
-                insert_sql = f"""
-                    INSERT INTO gpu_classes ({columns_str})
-                    VALUES %s
-                    ON CONFLICT (gpu_class_id) DO UPDATE SET {update_clause}
-                """
-            else:
-                insert_sql = f"INSERT INTO gpu_classes ({columns_str}) VALUES %s"
+
+            # Use upsert to handle conflicts
+            insert_sql = """
+                INSERT INTO gpu_classes 
+                (gpu_class_id, batch_price, low_price, medium_price, high_price, 
+                 gpu_type, gpu_class_name, vram_gb)
+                VALUES %s
+                ON CONFLICT (gpu_class_id) DO UPDATE SET
+                    batch_price = EXCLUDED.batch_price,
+                    low_price = EXCLUDED.low_price,
+                    medium_price = EXCLUDED.medium_price,
+                    high_price = EXCLUDED.high_price,
+                    gpu_type = EXCLUDED.gpu_type,
+                    gpu_class_name = EXCLUDED.gpu_class_name,
+                    vram_gb = EXCLUDED.vram_gb
+            """
 
             execute_values(cursor, insert_sql, values, template=None, page_size=1000)
-
             print(f"✅ Imported {len(gpu_classes)} GPU classes")
 
             # Show some stats
@@ -205,21 +198,48 @@ def import_gpu_classes(file_path, clear_table=False, dry_run=False):
 
             cursor.execute(
                 """
-                SELECT gpu_class_name, vram_gb 
+                SELECT gpu_class_name, vram_gb, medium_price, gpu_type
                 FROM gpu_classes 
                 WHERE gpu_class_name IS NOT NULL 
-                ORDER BY vram_gb DESC NULLS LAST, gpu_class_name 
+                ORDER BY vram_gb DESC NULLS LAST, medium_price DESC NULLS LAST
                 LIMIT 5;
             """
             )
             samples = cursor.fetchall()
 
+            cursor.execute(
+                """
+                SELECT gpu_type, COUNT(*), AVG(medium_price) as avg_price
+                FROM gpu_classes 
+                WHERE gpu_type IS NOT NULL
+                GROUP BY gpu_type 
+                ORDER BY COUNT(*) DESC;
+            """
+            )
+            type_stats = cursor.fetchall()
+
             print(f"\n📊 Database now contains {total_count} GPU classes")
+            
             if samples:
-                print("📋 Sample GPU classes:")
-                for name, vram in samples:
+                print("📋 Top GPU classes by VRAM and price:")
+                for name, vram, price, gpu_type in samples:
                     vram_str = f"{vram}GB" if vram else "Unknown"
-                    print(f"   - {name} ({vram_str})")
+                    price_str = f"${price:.3f}" if price else "N/A"
+                    type_str = gpu_type if gpu_type else "N/A"
+                    print(f"   - {name} ({vram_str}) - {price_str} [{type_str}]")
+
+            if type_stats:
+                print("\n🏷️  GPU type breakdown:")
+                for gpu_type, count, avg_price in type_stats:
+                    avg_str = f"${avg_price:.3f}" if avg_price else "N/A"
+                    print(f"   - {gpu_type}: {count} classes, {avg_str} avg price")
+
+        if errors:
+            print(f"\n⚠️  Skipped {len(errors)} rows with errors:")
+            for error in errors[:5]:
+                print(f"   {error}")
+            if len(errors) > 5:
+                print(f"   ... and {len(errors) - 5} more")
 
         conn.commit()
         cursor.close()
@@ -238,9 +258,9 @@ def import_gpu_classes(file_path, clear_table=False, dry_run=False):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Import GPU classes data from JSON file"
+        description="Import GPU classes data from CSV file"
     )
-    parser.add_argument("input_file", help="Input JSON file path")
+    parser.add_argument("input_file", help="Input CSV file path")
     parser.add_argument(
         "--clear",
         action="store_true",
