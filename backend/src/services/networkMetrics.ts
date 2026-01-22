@@ -151,11 +151,6 @@ export async function getPlanStats(period: PlanPeriod): Promise<PlanStatsRespons
   const transactionRangeStart = getRangeStart(new Date(), period);
   const granularity = getGranularity(period);
 
-  console.log('DEBUG - period:', period);
-  console.log('DEBUG - PERIOD_HOURS[period]:', PERIOD_HOURS[period]);
-  console.log('DEBUG - planRangeStart:', planRangeStart);
-  console.log('DEBUG - transactionRangeStart:', transactionRangeStart);
-
   // PLAN METRICS TIMING: Use data cutoff (48-hour offset) because node plan data needs processing time
   const planCutoffMs = toEpochMs(cutoff);
   const planStartMs = planRangeStart ? toEpochMs(planRangeStart) : null;
@@ -167,16 +162,6 @@ export async function getPlanStats(period: PlanPeriod): Promise<PlanStatsRespons
 
   const transactionStartMs = transactionRangeStart ? toEpochMs(transactionRangeStart) : null;
   const transactionTimeParams = transactionStartMs ? [transactionEndMs, transactionStartMs] : [transactionEndMs];
-
-  // Debug logging
-  console.log('period:', period);
-  console.log('planCutoffMs:', planCutoffMs, planCutoffMs ? new Date(planCutoffMs).toISOString() : null);
-  console.log('planStartMs:', planStartMs, planStartMs ? new Date(planStartMs).toISOString() : null);
-  console.log('planTimeParams:', planTimeParams, planTimeParams.map(ts => ts ? new Date(ts).toISOString() : null));
-  console.log('currentTime:', currentTime, new Date(currentTime).toISOString());
-  console.log('transactionEndMs:', transactionEndMs, new Date(transactionEndMs).toISOString());
-  console.log('transactionStartMs:', transactionStartMs, transactionStartMs ? new Date(transactionStartMs).toISOString() : null);
-  console.log('transactionTimeParams:', transactionTimeParams, transactionTimeParams.map(ts => ts ? new Date(ts).toISOString() : null));
 
   // Build WHERE clause for plan time range - use overlap logic for all plan metrics
   const planTimeWhereForOverlap = planStartMs
@@ -807,7 +792,6 @@ export async function getPlanStats(period: PlanPeriod): Promise<PlanStatsRespons
     // Don't apply offset to transaction data - it's already confirmed on-chain
     const bucketTimestamp = new Date(row.bucket.getTime()).toISOString();
     const count = parseInt(row.transaction_count || '0', 10);
-    // console.log('TransactionBucket:', bucketTimestamp, 'count:', count);
     transactionCountMap.set(bucketTimestamp, count);
   }
 
@@ -819,7 +803,6 @@ export async function getPlanStats(period: PlanPeriod): Promise<PlanStatsRespons
     const expectedFees = parseFloat(row.total_fees || '0');
     const observedFees = observedFeesMap.get(transactionTimestamp) || 0;
     const transactionCount = transactionCountMap.get(transactionTimestamp) || 0;
-    console.log('PlanBucket:', new Date(row.bucket.getTime()).toISOString(), 'TransactionLookup:', transactionTimestamp, 'Found:', transactionCount);
     return {
       timestamp: planTimestamp, // Use plan timestamp for display (with offset)
       active_nodes: parseInt(row.active_nodes, 10) || 0,

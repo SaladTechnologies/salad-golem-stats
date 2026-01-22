@@ -638,17 +638,7 @@ export default function Dashboard() {
                     {
                       value: totals.total_fees ?? 0,
                       unit: '$',
-                      label: `Fees expected (${periodLabel})`,
-                    },
-                    {
-                      value: totals.observed_fees ?? 0,
-                      unit: 'GLM',
-                      label: `Fees observed (${periodLabel})`,
-                    },
-                    {
-                      value: totals.transaction_count ?? 0,
-                      unit: '',
-                      label: `Transactions (${periodLabel})`,
+                      label: `Expected Fees Paid (${periodLabel})`,
                     },
                     {
                       value: totals.compute_hours ?? 0,
@@ -787,6 +777,18 @@ export default function Dashboard() {
                   </Grid>
                   <Grid size={{ xs: 12, sm: 6 }}>
                     <TrendChart
+                      id="trend-total-invoice-amount"
+                      title="Fees Paid ($)"
+                      description="Fees paid by customers for workloads running on SaladCloud."
+                      trendWindow={globalTimeWindow}
+                      trendData={transformTimeSeries(plansData.time_series, 'total_fees')}
+                      unit="$"
+                      unitType="front"
+                      isLoading={isLoading}
+                    />
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <TrendChart
                       id="trend-total-time-hours"
                       title="Compute Time (hr)"
                       description="Time customer workloads ran on SaladCloud."
@@ -797,44 +799,6 @@ export default function Dashboard() {
                       isLoading={isLoading}
                     />
                   </Grid>
-                  <Grid size={{ xs: 12, sm: 6 }}>
-                    <TrendChart
-                      id="trend-total-invoice-amount"
-                      title="Fees Expected ($)"
-                      description="Expected fees from invoices."
-                      trendWindow={globalTimeWindow}
-                      trendData={transformTimeSeries(plansData.time_series, 'total_fees')}
-                      unit="$"
-                      unitType="front"
-                      isLoading={isLoading}
-                    />
-                  </Grid>
-                  <Grid size={{ xs: 12, sm: 6 }}>
-                    <TrendChart
-                      id="trend-observed-fees"
-                      title="Fees Observed (GLM)"
-                      description="Actual GLM transactions made to providers."
-                      trendWindow={globalTimeWindow}
-                      trendData={transformTimeSeries(plansData.time_series, 'observed_fees')}
-                      unit="GLM"
-                      unitType="back"
-                      isLoading={isLoading}
-                    />
-                  </Grid>
-                  <Grid size={{ xs: 12, sm: 6 }}>
-                    <TrendChart
-                      id="trend-transaction-count"
-                      title="Payment Transactions"
-                      description="Number of GLM payment transactions to providers."
-                      trendWindow={globalTimeWindow}
-                      trendData={transformTimeSeries(plansData.time_series, 'transaction_count')}
-                      unit=""
-                      unitType="front"
-                      isLoading={isLoading}
-                    />
-                  </Grid>
-
-
                 </>
               ) : (
                 <Typography variant="body2" color="textSecondary">
@@ -869,18 +833,6 @@ export default function Dashboard() {
                       trendWindow={globalTimeWindow}
                       trendData={transformTimeSeries(plansData.time_series, 'core_hours')}
                       unit="CPU-hr"
-                      unitType="below"
-                      isLoading={isLoading}
-                    />
-                  </Grid>
-                  <Grid size={{ xs: 12, sm: 6 }}>
-                    <TrendChart
-                      id="trend-gpu-hours"
-                      title="GPU Time Total (hr)"
-                      description="Total GPU compute hours across all workloads and GPUs."
-                      trendWindow={globalTimeWindow}
-                      trendData={transformTimeSeries(plansData.time_series, 'gpu_hours')}
-                      unit="GPU-hrs"
                       unitType="below"
                       isLoading={isLoading}
                     />
@@ -927,6 +879,18 @@ export default function Dashboard() {
                       chartData={plansData.gpu_hours_by_vram_ts}
                       labels={plansData.gpu_hours_by_vram_ts?.labels || []}
                       unit="hours"
+                    />
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <TrendChart
+                      id="trend-gpu-hours"
+                      title="GPU Time Total (hr)"
+                      description="Total GPU compute hours across all workloads and GPUs."
+                      trendWindow={globalTimeWindow}
+                      trendData={transformTimeSeries(plansData.time_series, 'gpu_hours')}
+                      unit="GPU-hrs"
+                      unitType="below"
+                      isLoading={isLoading}
                     />
                   </Grid>
                 </>
