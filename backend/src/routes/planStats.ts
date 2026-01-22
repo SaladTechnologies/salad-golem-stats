@@ -1,6 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { createCacheHooks } from '../cache/redis.js';
-import { getPlanStats } from '../services/planMetrics.js';
+import { getPlanStats } from '../services/networkMetrics.js';
 import type { PlanPeriod } from '../types/index.js';
 
 const ALLOWED_PERIODS = ['6h', '24h', '7d', '30d', '90d', 'total'] as const;
@@ -48,6 +48,9 @@ export async function planStatsRoutes(fastify: FastifyInstance): Promise<void> {
                 properties: {
                   active_nodes: { type: 'number' },
                   total_fees: { type: 'number' },
+                  //expected_fees: { type: 'number' },
+                  //observed_fees: { type: 'number' },
+                  //transaction_count: { type: 'number' },
                   compute_hours: { type: 'number' },
                   core_hours: { type: 'number' },
                   ram_hours: { type: 'number' },
@@ -102,6 +105,9 @@ export async function planStatsRoutes(fastify: FastifyInstance): Promise<void> {
                     timestamp: { type: 'string', format: 'date-time' },
                     active_nodes: { type: 'number' },
                     total_fees: { type: 'number' },
+                    //expected_fees: { type: 'number' },
+                    //observed_fees: { type: 'number' },
+                    //transaction_count: { type: 'number' },
                     compute_hours: { type: 'number' },
                     core_hours: { type: 'number' },
                     ram_hours: { type: 'number' },

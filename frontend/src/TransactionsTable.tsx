@@ -19,11 +19,7 @@ import {
   TableRow,
   Typography,
   Divider,
-  Box,
-  Button,
-  Select,
-  MenuItem,
-  SelectChangeEvent,
+  TablePagination,
 } from '@mui/material';
 
 export interface Transaction {
@@ -46,38 +42,34 @@ interface SortableHeaderProps {
 }
 
 interface FetchOptions {
+  page?: number;
   pageSize?: number;
-  cursor?: string | null;
-  direction?: 'next' | 'prev';
   sortBy?: string;
   sortOrder?: 'asc' | 'desc';
 }
 
 interface TransactionsResponse {
   transactions?: Transaction[];
-  next_cursor?: string | null;
-  prev_cursor?: string | null;
   total?: number;
 }
 
 export default function TransactionsTable() {
-  // Pagination and sorting state for cursor-based API
+  const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState(10);
+  const [totalRows, setTotalRows] = useState(0);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [nextCursor, setNextCursor] = useState<string | null>(null);
-  const [prevCursor, setPrevCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [sortBy, setSortBy] = useState('time');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
-  // Fetch transactions from backend
   const fetchTransactions = useCallback(
     (opts: FetchOptions = {}) => {
       setLoading(true);
       const params = new URLSearchParams();
       params.append('limit', String(opts.pageSize ?? pageSize));
-      if (opts.cursor) params.append('cursor', opts.cursor);
-      if (opts.direction) params.append('direction', opts.direction);
+      // Calculate offset for page-based pagination
+      const offset = (opts.page ?? page) * (opts.pageSize ?? pageSize);
+      params.append('offset', String(offset));
       params.append('sort_by', opts.sortBy ?? sortBy);
       params.append('sort_order', opts.sortOrder ?? sortOrder);
       fetch(`${import.meta.env.VITE_STATS_API_URL}/metrics/transactions?${params.toString()}`)
@@ -87,26 +79,24 @@ export default function TransactionsTable() {
             : Promise.reject('Failed to fetch transactions'),
         )
         .then((data) => {
-          if (data.transactions && data.transactions.length > 0) {
+          if (data.transactions) {
             setTransactions(data.transactions);
-            setNextCursor(data.next_cursor || null);
-            setPrevCursor(data.prev_cursor || null);
+            setTotalRows(data.total ?? 0);
           }
         })
         .catch(() => {
           setTransactions([]);
-          setNextCursor(null);
-          setPrevCursor(null);
+          setTotalRows(0);
         })
         .finally(() => setLoading(false));
     },
-    [pageSize, sortBy, sortOrder],
+    [page, pageSize, sortBy, sortOrder],
   );
 
-  // Initial load and when pageSize, sortBy, or sortOrder changes
+  // Initial load and when page, pageSize, sortBy, or sortOrder changes
   useEffect(() => {
-    fetchTransactions({ pageSize, cursor: null, direction: 'next', sortBy, sortOrder });
-  }, [pageSize, sortBy, sortOrder, fetchTransactions]);
+    fetchTransactions({ page, pageSize, sortBy, sortOrder });
+  }, [page, pageSize, sortBy, sortOrder, fetchTransactions]);
 
   // SortableHeader component for column headers
   function SortableHeader({
@@ -265,135 +255,37 @@ export default function TransactionsTable() {
     data: transactions,
     columns,
     getCoreRowModel: getCoreRowModel(),
+    manualPagination: true,
+    rowCount: totalRows,
   });
+
+  const handleChangePage = (
+    _event: React.MouseEvent<HTMLButtonElement> | null,
+    newPage: number,
+  ) => {
+    setPage(newPage);
+  };
+
+  const handleChangeRowsPerPage = (
+    event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
+  ) => {
+    setPageSize(parseInt(event.target.value, 10));
+    setPage(0);
+  };
 
   return (
     <>
-      {/* Pagination controls at the top */}
-      <Box display="flex" alignItems="center" justifyContent="flex-end" gap={2} mb={2} mt={2}>
-        <Typography
-          variant="body2"
-          sx={(theme) => ({
-            color: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.6)',
-          })}
-        >
-          Rows per page:
-        </Typography>
-        <Select
-          size="small"
-          value={pageSize}
-          onChange={(e: SelectChangeEvent<number>) => {
-            setPageSize(Number(e.target.value));
-          }}
-          sx={(theme) => ({
-            color: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.6)',
-            '.MuiOutlinedInput-notchedOutline': {
-              borderColor:
-                theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)',
-            },
-            '&:hover .MuiOutlinedInput-notchedOutline': {
-              borderColor: 'rgb(83,166,38) !important',
-            },
-            '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
-              borderColor: 'rgb(83,166,38) !important',
-            },
-          })}
-        >
-          {[5, 10, 25, 50, 100].map((size) => (
-            <MenuItem key={size} value={size} sx={{ color: 'inherit' }}>
-              {size}
-            </MenuItem>
-          ))}
-        </Select>
-        <Button
-          size="small"
-          variant="outlined"
-          onClick={() => {
-            fetchTransactions({
-              pageSize,
-              cursor: null,
-              direction: 'next',
-            });
-          }}
-          disabled={!prevCursor}
-          sx={(theme) => ({
-            color: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.6)',
-            borderColor:
-              theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)',
-            background: 'none',
-            boxShadow: 'none',
-            textTransform: 'none',
-          })}
-        >
-          First
-        </Button>
-        <Button
-          size="small"
-          variant="outlined"
-          onClick={() => {
-            fetchTransactions({
-              pageSize,
-              cursor: prevCursor,
-              direction: 'prev',
-            });
-          }}
-          disabled={!prevCursor}
-          sx={(theme) => ({
-            color: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.6)',
-            borderColor:
-              theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)',
-            background: 'none',
-            boxShadow: 'none',
-            textTransform: 'none',
-          })}
-        >
-          Previous
-        </Button>
-        <Button
-          size="small"
-          variant="outlined"
-          onClick={() => {
-            fetchTransactions({
-              pageSize,
-              cursor: nextCursor,
-              direction: 'next',
-            });
-          }}
-          disabled={!nextCursor}
-          sx={(theme) => ({
-            color: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.6)',
-            borderColor:
-              theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)',
-            background: 'none',
-            boxShadow: 'none',
-            textTransform: 'none',
-          })}
-        >
-          Next
-        </Button>
-        <Button
-          size="small"
-          variant="outlined"
-          onClick={() => {
-            fetchTransactions({
-              pageSize,
-              cursor: null,
-              direction: 'prev',
-            });
-          }}
-          disabled={!nextCursor}
-          sx={(theme) => ({
-            color: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.6)',
-            borderColor:
-              theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)',
-            background: 'none',
-            boxShadow: 'none',
-            textTransform: 'none',
-          })}
-        >
-          Last
-        </Button>
-      </Box>
+      <TablePagination
+        component="div"
+        count={totalRows}
+        page={page}
+        onPageChange={handleChangePage}
+        rowsPerPage={pageSize}
+        onRowsPerPageChange={handleChangeRowsPerPage}
+        rowsPerPageOptions={[5, 10, 25, 50, 100]}
+        showFirstButton
+        showLastButton
+      />
       <Divider sx={{ mt: 2, mb: 2 }} />
       <TableContainer
         component={Paper}

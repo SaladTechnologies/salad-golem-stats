@@ -1,5 +1,5 @@
 import { config } from '../config.js';
-import { getPlanStats } from './planMetrics.js';
+import { getPlanStats } from './networkMetrics.js';
 import { getGolemNetworkStats, getGolemHistoricalStats } from './golemMetrics.js';
 import { getRedisClient, generateCacheKeyForWarmer } from '../cache/redis.js';
 import type { PlanPeriod } from '../types/index.js';

@@ -27,6 +27,9 @@ interface TimeSeriesPoint {
   timestamp: string;
   active_nodes?: number;
   total_fees?: number;
+  expected_fees?: number;
+  observed_fees?: number;
+  transaction_count?: number;
   compute_hours?: number;
   ram_hours?: number;
   core_hours?: number;
@@ -36,6 +39,9 @@ interface TimeSeriesPoint {
 interface PlansMetricsTotals {
   active_nodes?: number;
   total_fees?: number;
+  expected_fees?: number;
+  observed_fees?: number;
+  transaction_count?: number;
   compute_hours?: number;
 }
 
@@ -781,7 +787,6 @@ export default function Dashboard() {
                       isLoading={isLoading}
                     />
                   </Grid>
-
                   <Grid size={{ xs: 12, sm: 6 }}>
                     <TrendChart
                       id="trend-total-time-hours"
@@ -879,8 +884,8 @@ export default function Dashboard() {
                   <Grid size={{ xs: 12, sm: 6 }}>
                     <TrendChart
                       id="trend-gpu-hours"
-                      title="GPU Time (hr)"
-                      description="Total GPU compute hours across all workloads."
+                      title="GPU Time Total (hr)"
+                      description="Total GPU compute hours across all workloads and GPUs."
                       trendWindow={globalTimeWindow}
                       trendData={transformTimeSeries(plansData.time_series, 'gpu_hours')}
                       unit="GPU-hrs"

@@ -130,5 +130,5 @@ npm run test:integration
 
 - Tests automatically setup and teardown the database schema
 - Each test gets a clean database state with fresh fixtures
-- 48-hour data offset is applied to align with production `planMetrics` logic
+- 48-hour data offset is applied to align with production `networkMetrics` logic
 - Integration tests have 30-second timeouts to accommodate database operations

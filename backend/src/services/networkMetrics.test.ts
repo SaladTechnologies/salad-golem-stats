@@ -6,12 +6,12 @@ vi.mock('../db/connection.js', () => ({
   query: vi.fn(),
 }));
 
-import { getPlanStats } from './planMetrics.js';
+import { getPlanStats } from './networkMetrics.js';
 import { query } from '../db/connection.js';
 
 const mockQuery = vi.mocked(query);
 
-describe('planMetrics service', () => {
+describe('networkMetrics service', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // Freeze time for consistent testing

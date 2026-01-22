@@ -3,8 +3,8 @@ import Fastify from 'fastify';
 import type { FastifyInstance } from 'fastify';
 import { planStatsRoutes } from './planStats.js';
 
-// Mock the planMetrics service
-vi.mock('../services/planMetrics.js', () => ({
+// Mock the networkMetrics service
+vi.mock('../services/networkMetrics.js', () => ({
   getPlanStats: vi.fn(),
 }));
 
@@ -16,7 +16,7 @@ vi.mock('../cache/redis.js', () => ({
   }),
 }));
 
-import { getPlanStats } from '../services/planMetrics.js';
+import { getPlanStats } from '../services/networkMetrics.js';
 
 const mockGetPlanStats = vi.mocked(getPlanStats);
 

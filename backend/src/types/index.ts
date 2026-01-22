@@ -42,6 +42,8 @@ export interface StatsResponse {
 export interface TrendsResponse {
   total_time_hours: DataPoint[];
   total_invoice_amount: DataPoint[];
+  observed_fees: DataPoint[];
+  transaction_count: DataPoint[];
   total_ram_hours: DataPoint[];
   total_cpu_hours: DataPoint[];
   total_transaction_count: DataPoint[];
@@ -86,6 +88,9 @@ export type Granularity = "hourly" | "daily";
 export interface PlanTotals {
   active_nodes: number;
   total_fees: number;
+  expected_fees: number; // Fees from plan data (existing total_fees)
+  observed_fees: number; // Fees from transaction data
+  transaction_count: number; // Count of GLM transactions
   compute_hours: number;
   core_hours: number;
   ram_hours: number;
@@ -97,6 +102,9 @@ export interface PlanDataPoint {
   timestamp: string;
   active_nodes: number;
   total_fees: number;
+  expected_fees: number; // Fees from plan data (existing total_fees) 
+  observed_fees: number; // Fees from transaction data
+  transaction_count: number; // Count of GLM transactions
   compute_hours: number;
   core_hours: number;
   ram_hours: number;

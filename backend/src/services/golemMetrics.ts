@@ -1,8 +1,8 @@
-import { getPlanStats } from './planMetrics.js';
+import { getPlanStats } from './networkMetrics.js';
 import { query } from '../db/connection.js';
 import { config } from '../config.js';
 
-// Data offset in hours - matches planMetrics offset
+// Data offset in hours - matches networkMetrics offset
 // Can't return data that hasn't gone through Golem yet
 const DATA_OFFSET_HOURS = 48;
 
@@ -117,7 +117,7 @@ export async function getGolemNetworkStats(): Promise<NetworkStatsResponse> {
   // This would need to be extended based on actual version tracking in the database
   const versions = [
     {
-      version: '1.0.0',
+      version: '0.17.6',
       count: currentData.active_nodes,
       rc: false,
     },
@@ -137,12 +137,12 @@ export async function getGolemNetworkStats(): Promise<NetworkStatsResponse> {
       gpus: parseInt(resources.total_gpus, 10),
     },
     earnings: {
-      '6h': stats6h.totals.total_fees,
-      '24h': stats24h.totals.total_fees,
-      '168h': stats7d.totals.total_fees,
-      '720h': stats30d.totals.total_fees,
-      '2160h': stats90d.totals.total_fees,
-      total: statsTotal.totals.total_fees,
+      '6h': stats6h.totals.observed_fees,
+      '24h': stats24h.totals.observed_fees,
+      '168h': stats7d.totals.observed_fees,
+      '720h': stats30d.totals.observed_fees,
+      '2160h': stats90d.totals.observed_fees,
+      total: statsTotal.totals.observed_fees,
     },
     versions,
   };
