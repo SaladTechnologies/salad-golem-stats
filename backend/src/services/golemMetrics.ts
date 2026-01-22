@@ -2,10 +2,6 @@ import { getPlanStats } from './networkMetrics.js';
 import { query } from '../db/connection.js';
 import { config } from '../config.js';
 
-// Data offset in hours - matches networkMetrics offset
-// Can't return data that hasn't gone through Golem yet
-const DATA_OFFSET_HOURS = 48;
-
 interface NetworkStatsResponse {
   timestamp: string;
   network_id: string;
@@ -78,9 +74,7 @@ export async function getGolemNetworkStats(): Promise<NetworkStatsResponse> {
     gpu_hours: 0,
   };
 
-  // Calculate total resources from nodes active in the 6h window
-  // Uses same time window as stats6h with DATA_OFFSET applied
-  const cutoffMs = Date.now() - (DATA_OFFSET_HOURS * 3600000);
+  const cutoffMs = Date.now() 
   const startMs = cutoffMs - (6 * 3600000);
 
   const resourcesResult = await query<{
@@ -154,8 +148,7 @@ export async function getGolemHistoricalStats(): Promise<HistoricalStatsResponse
 
   // Query for historical resource data by runtime (VM vs VM-NVIDIA)
   // Get hourly data for last 24 hours, daily for older
-  // Apply DATA_OFFSET to align with other metrics
-  const historicalCutoff = Date.now() - (DATA_OFFSET_HOURS * 3600000);
+  const historicalCutoff = Date.now();
   const historicalStart = historicalCutoff - (30 * 24 * 3600000); // 30 days
 
   const networkStatsResult = await query<{
@@ -227,10 +220,10 @@ export async function getGolemHistoricalStats(): Promise<HistoricalStatsResponse
   }
 
   // Get utilization data at configured granularity (default: 30-second intervals for last 6 hours)
-  // Apply DATA_OFFSET to align with other metrics
+
   const granularitySeconds = config.golemUtilizationGranularitySeconds;
   const utilizationHours = 6;
-  const utilizationCutoff = Date.now() - (DATA_OFFSET_HOURS * 3600000);
+  const utilizationCutoff = Date.now()
   const utilizationStart = utilizationCutoff - (utilizationHours * 3600000);
   // Subtract one interval to make end exclusive (generate_series includes both endpoints)
   const utilizationEnd = utilizationCutoff - (granularitySeconds * 1000);
