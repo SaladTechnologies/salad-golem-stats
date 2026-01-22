@@ -2,6 +2,9 @@ import { getPlanStats } from './networkMetrics.js';
 import { query } from '../db/connection.js';
 import { config } from '../config.js';
 
+// Can't return data that hasn't gone through Golem yet
+const DATA_OFFSET_HOURS = 48;
+
 interface NetworkStatsResponse {
   timestamp: string;
   network_id: string;
@@ -74,7 +77,7 @@ export async function getGolemNetworkStats(): Promise<NetworkStatsResponse> {
     gpu_hours: 0,
   };
 
-  const cutoffMs = Date.now() 
+  const cutoffMs = Date.now() - (DATA_OFFSET_HOURS * 3600000);;
   const startMs = cutoffMs - (6 * 3600000);
 
   const resourcesResult = await query<{
@@ -148,7 +151,7 @@ export async function getGolemHistoricalStats(): Promise<HistoricalStatsResponse
 
   // Query for historical resource data by runtime (VM vs VM-NVIDIA)
   // Get hourly data for last 24 hours, daily for older
-  const historicalCutoff = Date.now();
+  const historicalCutoff = Date.now() - (DATA_OFFSET_HOURS * 3600000);
   const historicalStart = historicalCutoff - (30 * 24 * 3600000); // 30 days
 
   const networkStatsResult = await query<{
@@ -204,7 +207,7 @@ export async function getGolemHistoricalStats(): Promise<HistoricalStatsResponse
 
   for (const row of networkStatsResult) {
     const dataPoint: HistoricalDataPoint = {
-      date: Math.floor(row.bucket.getTime() / 1000),
+      date: Math.floor((row.bucket.getTime() + DATA_OFFSET_HOURS * 3600 * 1000) / 1000),
       online: parseInt(row.online, 10),
       cores: parseInt(row.cores, 10),
       memory_gib: parseFloat(row.ram_gib),
@@ -223,7 +226,7 @@ export async function getGolemHistoricalStats(): Promise<HistoricalStatsResponse
 
   const granularitySeconds = config.golemUtilizationGranularitySeconds;
   const utilizationHours = 6;
-  const utilizationCutoff = Date.now()
+  const utilizationCutoff = Date.now() - (DATA_OFFSET_HOURS * 3600000);
   const utilizationStart = utilizationCutoff - (utilizationHours * 3600000);
   // Subtract one interval to make end exclusive (generate_series includes both endpoints)
   const utilizationEnd = utilizationCutoff - (granularitySeconds * 1000);
@@ -254,7 +257,7 @@ export async function getGolemHistoricalStats(): Promise<HistoricalStatsResponse
   );
 
   const utilization: Array<[number, number]> = utilizationResult.map((row) => [
-    Math.floor(row.bucket.getTime() / 1000),
+    Math.floor((row.bucket.getTime() + DATA_OFFSET_HOURS * 3600 * 1000) / 1000),
     parseInt(row.computing_nodes, 10),
   ]);
 
@@ -266,7 +269,7 @@ export async function getGolemHistoricalStats(): Promise<HistoricalStatsResponse
       return date.getUTCHours() === 0;
     })
     .map((point) => ({
-      date: new Date(point.timestamp).toISOString().split('T')[0],
+      date: new Date(new Date(point.timestamp).getTime()).toISOString().split('T')[0],
       total: point.active_nodes,
     }));
 
