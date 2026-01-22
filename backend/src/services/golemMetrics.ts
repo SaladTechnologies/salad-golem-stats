@@ -207,7 +207,7 @@ export async function getGolemHistoricalStats(): Promise<HistoricalStatsResponse
 
   for (const row of networkStatsResult) {
     const dataPoint: HistoricalDataPoint = {
-      date: Math.floor((row.bucket.getTime() + DATA_OFFSET_HOURS * 3600 * 1000) / 1000),
+      date: Math.floor((row.bucket.getTime()) / 1000),
       online: parseInt(row.online, 10),
       cores: parseInt(row.cores, 10),
       memory_gib: parseFloat(row.ram_gib),
