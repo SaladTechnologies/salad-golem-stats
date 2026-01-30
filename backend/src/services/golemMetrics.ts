@@ -182,51 +182,50 @@ export async function getGolemHistoricalStats(): Promise<HistoricalStatsResponse
     gpus: string;
   }>(
     `
-    WITH hourly_buckets AS (
-      -- Generate hourly buckets for the last 24 hours
+    WITH hourly_timestamps AS (
+      -- Generate hourly timestamps for the last 24 hours
       SELECT generate_series(
         date_trunc('hour', to_timestamp($1 / 1000.0) - INTERVAL '24 hours'),
         date_trunc('hour', to_timestamp($1 / 1000.0)),
         INTERVAL '1 hour'
-      ) as bucket
+      ) as timestamp
     ),
-    daily_buckets AS (
-      -- Generate daily buckets for the older data
+    daily_timestamps AS (
+      -- Generate daily timestamps (midnight UTC) for the older data
       SELECT generate_series(
         date_trunc('day', to_timestamp($2 / 1000.0)),
         date_trunc('day', to_timestamp($1 / 1000.0) - INTERVAL '1 day'),
         INTERVAL '1 day'
-      ) as bucket
+      ) as timestamp
     ),
-    all_buckets AS (
-      SELECT bucket, INTERVAL '1 hour' as duration FROM hourly_buckets
+    all_timestamps AS (
+      SELECT timestamp FROM hourly_timestamps
       UNION ALL
-      SELECT bucket, INTERVAL '1 day' as duration FROM daily_buckets
+      SELECT timestamp FROM daily_timestamps
     ),
-    active_plans AS (
-      SELECT DISTINCT ON (b.bucket, np.node_id)
-        b.bucket,
+    nodes_at_timestamp AS (
+      -- For each timestamp, find the plan for each node active at that point in time
+      SELECT
+        t.timestamp,
         np.node_id,
         np.cpu,
         np.ram,
         CASE WHEN np.gpu_class_id IS NOT NULL AND np.gpu_class_id != '' THEN true ELSE false END as has_gpu
-      FROM all_buckets b
-      JOIN node_plan np ON
-        -- Plan was active during this bucket
-        np.start_at < (EXTRACT(EPOCH FROM (b.bucket + b.duration)) * 1000)
-        AND (np.stop_at IS NULL OR np.stop_at >= (EXTRACT(EPOCH FROM b.bucket) * 1000))
-      ORDER BY b.bucket, np.node_id, np.start_at DESC
+      FROM all_timestamps t
+      JOIN node_plan np ON 
+        np.start_at < (EXTRACT(EPOCH FROM (t.timestamp + INTERVAL '5 minutes')) * 1000) 
+        AND (np.stop_at IS NULL OR np.stop_at > (EXTRACT(EPOCH FROM t.timestamp) * 1000))
     )
     SELECT
-      bucket,
+      timestamp as bucket,
       has_gpu,
-      COUNT(DISTINCT node_id)::text as online,
+      COUNT(node_id)::text as online,
       SUM(cpu)::text as cores,
       SUM(ram / 1024.0)::text as ram_gib,
-      COUNT(DISTINCT CASE WHEN has_gpu THEN node_id END)::text as gpus
-    FROM active_plans
-    GROUP BY bucket, has_gpu
-    ORDER BY bucket, has_gpu
+      COUNT(CASE WHEN has_gpu THEN 1 END)::text as gpus
+    FROM nodes_at_timestamp
+    GROUP BY timestamp, has_gpu
+    ORDER BY timestamp, has_gpu
   `,
     [historicalCutoff, historicalStart]
   );
