@@ -172,10 +172,10 @@ export async function getGolemHistoricalStats(): Promise<HistoricalStatsResponse
       ) as timestamp
     ),
     daily_timestamps AS (
-      -- Generate daily timestamps (midnight UTC) for the older data
+      -- Generate daily timestamps (midnight UTC) for the older data, stopping before the hourly data starts
       SELECT generate_series(
         date_trunc('day', to_timestamp($2 / 1000.0)),
-        date_trunc('day', to_timestamp($1 / 1000.0) - INTERVAL '1 day'),
+        date_trunc('day', to_timestamp($1 / 1000.0)) - INTERVAL '2 days',
         INTERVAL '1 day'
       ) as timestamp
     ),
