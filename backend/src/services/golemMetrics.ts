@@ -163,41 +163,50 @@ export async function getGolemHistoricalStats(): Promise<HistoricalStatsResponse
     gpus: string;
   }>(
     `
-    WITH time_buckets AS (
+    WITH hourly_timestamps AS (
+      -- Generate hourly timestamps for the last 24 hours
+      SELECT generate_series(
+        date_trunc('hour', to_timestamp($1 / 1000.0) - INTERVAL '24 hours'),
+        date_trunc('hour', to_timestamp($1 / 1000.0)),
+        INTERVAL '1 hour'
+      ) as timestamp
+    ),
+    daily_timestamps AS (
+      -- Generate daily timestamps (midnight UTC) for the older data
+      SELECT generate_series(
+        date_trunc('day', to_timestamp($2 / 1000.0)),
+        date_trunc('day', to_timestamp($1 / 1000.0) - INTERVAL '1 day'),
+        INTERVAL '1 day'
+      ) as timestamp
+    ),
+    all_timestamps AS (
+      SELECT timestamp FROM hourly_timestamps
+      UNION ALL
+      SELECT timestamp FROM daily_timestamps
+    ),
+    nodes_at_timestamp AS (
+      -- For each timestamp, find the plan for each node active at that point in time
       SELECT
-        CASE
-          WHEN bucket >= to_timestamp($1 / 1000.0) - INTERVAL '24 hours' THEN date_trunc('hour', bucket)
-          ELSE date_trunc('day', bucket)
-        END as bucket,
-        CASE WHEN gpu_class_id IS NOT NULL AND gpu_class_id != '' THEN true ELSE false END as has_gpu,
-        COUNT(DISTINCT node_id) as online,
-        SUM(cpu) as cores,
-        SUM(ram / 1024.0) as ram_gib,
-        COUNT(DISTINCT CASE WHEN gpu_class_id IS NOT NULL AND gpu_class_id != '' THEN node_id END) as gpus
-      FROM (
-        SELECT DISTINCT ON (date_trunc('hour', to_timestamp(start_at / 1000.0)), node_id)
-          date_trunc('hour', to_timestamp(start_at / 1000.0)) as bucket,
-          node_id,
-          cpu,
-          ram,
-          gpu_class_id
-        FROM node_plan
-        WHERE start_at >= $2
-        ORDER BY date_trunc('hour', to_timestamp(start_at / 1000.0)), node_id, start_at DESC
-      ) x
-      GROUP BY 1, 2
+        t.timestamp,
+        np.node_id,
+        np.cpu,
+        np.ram,
+        CASE WHEN np.gpu_class_id IS NOT NULL AND np.gpu_class_id != '' THEN true ELSE false END as has_gpu
+      FROM all_timestamps t
+      JOIN node_plan np ON 
+        np.start_at < (EXTRACT(EPOCH FROM (t.timestamp + INTERVAL '5 minutes')) * 1000) 
+        AND (np.stop_at IS NULL OR np.stop_at > (EXTRACT(EPOCH FROM t.timestamp) * 1000))
     )
     SELECT
-      bucket,
+      timestamp as bucket,
       has_gpu,
-      online::text,
-      cores::text,
-      ram_gib::text,
-      gpus::text
-    FROM time_buckets
-    WHERE bucket >= to_timestamp($2 / 1000.0)
-      AND bucket < to_timestamp($1 / 1000.0)
-    ORDER BY bucket, has_gpu
+      COUNT(node_id)::text as online,
+      SUM(cpu)::text as cores,
+      SUM(ram / 1024.0)::text as ram_gib,
+      COUNT(CASE WHEN has_gpu THEN 1 END)::text as gpus
+    FROM nodes_at_timestamp
+    GROUP BY timestamp, has_gpu
+    ORDER BY timestamp, has_gpu
   `,
     [historicalCutoff, historicalStart]
   );
