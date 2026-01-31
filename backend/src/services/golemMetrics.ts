@@ -55,20 +55,6 @@ interface HistoricalStatsResponse {
   }>;
 }
 
-async function debug_countActiveNodes(startTime: number, endTime: number) {
-  console.log(`[DEBUG] Counting active nodes between ${new Date(startTime).toISOString()} and ${new Date(endTime).toISOString()}`);
-  
-  const result = await query<{ count: string }>(`
-    SELECT COUNT(DISTINCT node_id)::text as count
-    FROM node_plan
-    WHERE start_at < $2 AND (stop_at IS NULL OR stop_at >= $1)
-  `, [startTime, endTime]);
-
-  const count = parseInt(result[0]?.count || '0', 10);
-  console.log(`[DEBUG] Found ${count} active nodes in the time window.`);
-  return count;
-}
-
 export async function getGolemNetworkStats(): Promise<NetworkStatsResponse> {
   // Get current stats from various time periods
   const [stats6h, stats24h, stats7d, stats30d, stats90d, statsTotal] = await Promise.all([
@@ -162,11 +148,6 @@ export async function getGolemNetworkStats(): Promise<NetworkStatsResponse> {
 export async function getGolemHistoricalStats(): Promise<HistoricalStatsResponse> {
   // Get 30 days of historical data
   const stats30d = await getPlanStats('30d');
-
-  // DEBUG: Count nodes in a specific recent 1-hour window
-  const debugEndTime = Date.now() - (DATA_OFFSET_HOURS * 3600000);
-  const debugStartTime = debugEndTime - 3600000; // 1 hour ago
-  await debug_countActiveNodes(debugStartTime, debugEndTime);
 
   // Query for historical resource data by runtime (VM vs VM-NVIDIA)
   // Get hourly data for last 24 hours, daily for older
