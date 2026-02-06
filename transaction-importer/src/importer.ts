@@ -131,8 +131,12 @@ async function importMasterWalletTransactions(initialLookbackBlock: number): Pro
   logger.info(`Fetching GLM transfers from master wallet: ${masterWallet}`);
   const transfers = await getAllGlmTransfers(masterWallet, startBlock);
 
+  // Hardcoded exclusion for problematic transaction
+  const excludedHashes = new Set(['0xa10a3a1d346ffe5160225977ed67bb5691eab374877b64eaacd9fac562eec30f']);
+  const filteredTransfers = transfers.filter(t => !excludedHashes.has(t.hash.toLowerCase()));
+
   // Filter to outgoing transfers only
-  const outgoingTransfers = transfers.filter(
+  const outgoingTransfers = filteredTransfers.filter(
     t => t.from.toLowerCase() === masterWallet
   );
 
@@ -196,8 +200,12 @@ async function importRequesterWalletTransactions(
 
     const transfers = await getAllGlmTransfers(requesterWallet, startBlock);
 
+    // Hardcoded exclusion for problematic transaction
+    const excludedHashes = new Set(['0xa10a3a1d346ffe5160225977ed67bb5691eab374877b64eaacd9fac562eec30f']);
+    const filteredTransfers = transfers.filter(t => !excludedHashes.has(t.hash.toLowerCase()));
+
     // Filter to valid provider payments
-    const validTransfers = transfers.filter(t => {
+    const validTransfers = filteredTransfers.filter(t => {
       const from = t.from.toLowerCase();
       const to = t.to.toLowerCase();
 

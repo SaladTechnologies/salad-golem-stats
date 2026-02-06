@@ -166,8 +166,8 @@ export async function getGolemHistoricalStats(): Promise<HistoricalStatsResponse
     WITH hourly_timestamps AS (
       -- Generate hourly timestamps for the last 24 hours
       SELECT generate_series(
-        date_trunc('hour', to_timestamp($1 / 1000.0) - INTERVAL '23 hours'),
-        date_trunc('hour', to_timestamp($1 / 1000.0)),
+        date_trunc('hour', to_timestamp($1 / 1000.0) - INTERVAL '24 hours'),
+        date_trunc('hour', to_timestamp($1 / 1000.0)) - INTERVAL '1 hour',
         INTERVAL '1 hour'
       ) as timestamp
     ),
@@ -175,36 +175,51 @@ export async function getGolemHistoricalStats(): Promise<HistoricalStatsResponse
       -- Generate daily timestamps (midnight UTC) for the older data, stopping before the hourly data starts
       SELECT generate_series(
         date_trunc('day', to_timestamp($2 / 1000.0)),
-        date_trunc('day', to_timestamp($1 / 1000.0)) - INTERVAL '24 hours',
+        date_trunc('hour', to_timestamp($1 / 1000.0) - INTERVAL '24 hours'),
         INTERVAL '1 day'
       ) as timestamp
     ),
-    all_timestamps AS (
-      SELECT timestamp FROM hourly_timestamps
-      UNION
-      SELECT timestamp FROM daily_timestamps
-    ),
-    nodes_at_timestamp AS (
-      -- For each timestamp, find the plan for each node active at that point in time
+    hourly_nodes AS (
+      -- For each hour, find the distinct nodes that were active
       SELECT
         t.timestamp,
         np.node_id,
-        np.cpu,
-        np.ram,
-        CASE WHEN np.gpu_class_id IS NOT NULL AND np.gpu_class_id != '' THEN true ELSE false END as has_gpu
-      FROM all_timestamps t
-      JOIN node_plan np ON 
-        np.start_at < (EXTRACT(EPOCH FROM (t.timestamp + INTERVAL '5 minutes')) * 1000) 
-        AND (np.stop_at IS NULL OR np.stop_at > (EXTRACT(EPOCH FROM t.timestamp) * 1000))
+        MAX(np.cpu) as max_cpu,
+        MAX(np.ram) as max_ram,
+        BOOL_OR(CASE WHEN np.gpu_class_id IS NOT NULL AND np.gpu_class_id != '' THEN true ELSE false END) as has_gpu
+      FROM hourly_timestamps t
+      JOIN node_plan np ON
+        np.start_at < (EXTRACT(EPOCH FROM (t.timestamp + INTERVAL '1 hour')) * 1000)
+        AND (np.stop_at IS NULL OR np.stop_at >= (EXTRACT(EPOCH FROM t.timestamp) * 1000))
+      GROUP BY t.timestamp, np.node_id
+    ),
+    daily_nodes AS (
+      -- For each day, find the distinct nodes that were active
+      SELECT
+        t.timestamp,
+        np.node_id,
+        MAX(np.cpu) as max_cpu,
+        MAX(np.ram) as max_ram,
+        BOOL_OR(CASE WHEN np.gpu_class_id IS NOT NULL AND np.gpu_class_id != '' THEN true ELSE false END) as has_gpu
+      FROM daily_timestamps t
+      JOIN node_plan np ON
+        np.start_at < (EXTRACT(EPOCH FROM (t.timestamp + INTERVAL '1 day')) * 1000)
+        AND (np.stop_at IS NULL OR np.stop_at >= (EXTRACT(EPOCH FROM t.timestamp) * 1000))
+      GROUP BY t.timestamp, np.node_id
+    ),
+    all_nodes AS (
+      SELECT * FROM hourly_nodes
+      UNION ALL
+      SELECT * FROM daily_nodes
     )
     SELECT
       timestamp as bucket,
       has_gpu,
       COUNT(node_id)::text as online,
-      SUM(cpu)::text as cores,
-      SUM(ram / 1024.0)::text as ram_gib,
+      SUM(max_cpu)::text as cores,
+      SUM(max_ram / 1024.0)::text as ram_gib,
       COUNT(CASE WHEN has_gpu THEN 1 END)::text as gpus
-    FROM nodes_at_timestamp
+    FROM all_nodes
     GROUP BY timestamp, has_gpu
     ORDER BY timestamp, has_gpu
   `,
