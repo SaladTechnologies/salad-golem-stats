@@ -166,8 +166,8 @@ export async function getGolemHistoricalStats(): Promise<HistoricalStatsResponse
     WITH hourly_timestamps AS (
       -- Generate hourly timestamps for the last 24 hours
       SELECT generate_series(
-        date_trunc('hour', to_timestamp($1 / 1000.0) - INTERVAL '23 hours'),
-        date_trunc('hour', to_timestamp($1 / 1000.0)),
+        date_trunc('hour', to_timestamp($1 / 1000.0) - INTERVAL '24 hours'),
+        date_trunc('hour', to_timestamp($1 / 1000.0)) - INTERVAL '1 hour',
         INTERVAL '1 hour'
       ) as timestamp
     ),

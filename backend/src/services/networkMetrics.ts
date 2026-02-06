@@ -235,7 +235,7 @@ export async function getPlanStats(period: PlanPeriod): Promise<PlanStatsRespons
         (EXTRACT(EPOCH FROM bucket + interval '${intervalStr}') * 1000)::bigint as bucket_end_ms
       FROM generate_series(
         date_trunc('${bucketInterval}', to_timestamp($2 / 1000.0)),
-        date_trunc('${bucketInterval}', to_timestamp($1 / 1000.0)),
+        date_trunc('${bucketInterval}', to_timestamp($1 / 1000.0)) - interval '${intervalStr}',
         interval '${intervalStr}'
       ) as bucket
     ),
@@ -409,7 +409,7 @@ export async function getPlanStats(period: PlanPeriod): Promise<PlanStatsRespons
         (EXTRACT(EPOCH FROM bucket + interval '${intervalStr}') * 1000)::bigint as bucket_end_ms
       FROM generate_series(
         date_trunc('${bucketInterval}', to_timestamp($2 / 1000.0)),
-        date_trunc('${bucketInterval}', to_timestamp($1 / 1000.0)),
+        date_trunc('${bucketInterval}', to_timestamp($1 / 1000.0)) - interval '${intervalStr}',
         interval '${intervalStr}'
       ) as bucket
     )
@@ -460,7 +460,7 @@ export async function getPlanStats(period: PlanPeriod): Promise<PlanStatsRespons
         (EXTRACT(EPOCH FROM bucket + interval '${intervalStr}') * 1000)::bigint as bucket_end_ms
       FROM generate_series(
         date_trunc('${bucketInterval}', to_timestamp($2 / 1000.0)),
-        date_trunc('${bucketInterval}', to_timestamp($1 / 1000.0)),
+        date_trunc('${bucketInterval}', to_timestamp($1 / 1000.0)) - interval '${intervalStr}',
         interval '${intervalStr}'
       ) as bucket
     )
@@ -510,7 +510,7 @@ export async function getPlanStats(period: PlanPeriod): Promise<PlanStatsRespons
     WITH buckets AS (
       SELECT generate_series(
         date_trunc('${bucketInterval}', to_timestamp($2 / 1000.0)),
-        date_trunc('${bucketInterval}', to_timestamp($1 / 1000.0)),
+        date_trunc('${bucketInterval}', to_timestamp($1 / 1000.0)) - interval '${intervalStr}',
         interval '${intervalStr}'
       ) as bucket
     )
@@ -559,7 +559,7 @@ export async function getPlanStats(period: PlanPeriod): Promise<PlanStatsRespons
     WITH buckets AS (
       SELECT generate_series(
         date_trunc('${bucketInterval}', to_timestamp($2 / 1000.0)),
-        date_trunc('${bucketInterval}', to_timestamp($1 / 1000.0)),
+        date_trunc('${bucketInterval}', to_timestamp($1 / 1000.0)) - interval '${intervalStr}',
         interval '${intervalStr}'
       ) as bucket
     ),
